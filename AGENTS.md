@@ -3,7 +3,7 @@ kind: process
 status: active
 owner: maintainers
 created: 2026-05-09
-last_verified: 2026-09-18
+last_verified: 2026-11-12
 ---
 
 # AGENTS — pdomain-ocr-labeler-spa
@@ -56,7 +56,8 @@ output for debugging.
 - `data-testid` contract governs Playwright driver integration — see `docs/architecture/13-driver-contract.md`.
 - Modeled structurally on `../pdomain-prep-for-pgdp/` — consult it for scaffolding patterns.
 - `pdomain-book-tools` pinned in `pyproject.toml`; do not reach into its internals.
-- Specs are the source of truth. Code that disagrees with a spec is wrong — change the spec first.
+- Shipped behavior lives in `docs/architecture/`. If code and an architecture doc disagree, change the architecture doc
+  to match the code, with evidence. Unfinished design stays in `docs/specs/`. The roadmap is `docs/context/intent-map.md`.
 - Open questions live in `OPEN_QUESTIONS.md`; do not resolve them unilaterally.
 - After FastAPI model changes: run `make openapi-export` to keep TS types in sync.
 - `make build` will refuse without a populated `static/` — run `make frontend-build` first.
@@ -77,17 +78,15 @@ available in Git history. The legacy `pd-ocr-labeler` is superseded.
 
 **Open work:**
 
-`docs/issues/README.md` has no open issues — the 18 deep-review reports under
-`docs/issues/2026-07-21-*`, plus every report filed on 2026-09-18, are
-resolved and deleted.
-The July deep-review execution plan is retired. Its outcomes live in
-`docs/context/decisions.md`; remaining work lives in focused plans and
-`docs/context/intent-map.md`.
+The roadmap is [`docs/context/intent-map.md`](docs/context/intent-map.md).
+Shipped ownership is [`docs/architecture/30-repository-boundaries.md`](docs/architecture/30-repository-boundaries.md).
+Operational status is [`docs/context/current-state.md`](docs/context/current-state.md).
 
-High-level status, including what actually remains open (typography suggestion acceptance and undo, U-M6 history
-boundaries,
-finer page-load progress, and focused PGDP, glyph, and test-strictness work):
-[`docs/context/current-state.md`](docs/context/current-state.md).
+The open governed defect is
+[`docs/issues/2026-11-07-python-build-without-memfd-breaks-labeling-bundles.md`](docs/issues/2026-11-07-python-build-without-memfd-breaks-labeling-bundles.md).
+The 18 deep-review reports under `docs/issues/2026-07-21-*`, plus every report
+filed on 2026-09-18, are resolved and deleted. The July deep-review plan is
+retired. Its outcomes live in `docs/context/decisions.md`.
 
 Summary of what closed 2026-09-18 (full reasoning in
 `docs/context/decisions.md`):
@@ -117,18 +116,20 @@ Per-slice history is preserved in git log and GitHub closed milestones.
 
 ## Specs
 
-Active milestones and the ADR log live in `specs/`; glyph annotations live in
-`docs/architecture/20-glyph-annotations.md`.
-Implemented specs are under `docs/architecture/` (`00-overview.md` through
-`28-palettes-pickers.md`, minus 16/17 which remain in `specs/`; 20 now lives in architecture).
-All are canonical source of truth. Milestone acceptance gates:
-`specs/16-milestones.md`.
+Shipped design lives in `docs/architecture/` (`00-overview.md` through
+`31-typography-review.md`). `specs/16-milestones.md` is acceptance history.
+`specs/17-decisions.md` is the ADR log. Glyph annotations live in
+`docs/architecture/20-glyph-annotations.md`. The roadmap is
+`docs/context/intent-map.md`.
 
 ## Sibling repos
 
-- `../pdomain-book-tools/` — upstream dependency.
-- `../pdomain-prep-for-pgdp/` — structural reference (FastAPI + React single-wheel pattern).
-- `../pd-ocr-labeler/` — legacy NiceGUI UI being replaced; parity tracked via GitHub issues (`label:hifi:P1..P5`).
+Ownership and the current pins are in
+[`docs/architecture/30-repository-boundaries.md`](docs/architecture/30-repository-boundaries.md).
+
+- `../pdomain-book-tools/` — OCR runtime. Do not reach into its internals.
+- `../pdomain-prep-for-pgdp/` — structural reference. Do not port its pipeline.
+- `../pd-ocr-labeler/` — legacy NiceGUI UI. This SPA supersedes it.
 
 ## GH issues
 

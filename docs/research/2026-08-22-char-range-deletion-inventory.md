@@ -1,22 +1,22 @@
 ---
 kind: research
-status: active
+status: implemented
 owner: maintainers
 created: 2026-08-22
-last_verified: 2026-08-22
+last_verified: 2026-11-12
 ---
 
 # CharRange deletion inventory
 
-No persisted CharRange data was found, so the typography editor can make the approved clean schema break without migrating user records.
+No persisted CharRange data was found. The clean break has since landed: the OpenAPI schema has no `/char-ranges` path, and legacy payloads are rejected. See [typography review](../architecture/31-typography-review.md).
 
 ## Agent Index
 
 - **Kind:** research
-- **Status:** active
+- **Status:** implemented
 - **Owner:** maintainers
-- **Last verified:** 2026-08-22
-- **Read when:** removing the legacy CharRange contract or checking whether CharRange migration is required.
+- **Last verified:** 2026-11-12
+- **Read when:** checking whether any CharRange migration was required, or why the legacy route is gone.
 - **Search terms:** CharRange deletion, char_ranges inventory, typography clean break, grapheme editor migration.
 
 ## Goal
@@ -69,9 +69,13 @@ The typography design approves a clean schema break after this read-only invento
 
 The replacement must land before removing the `/char-ranges` endpoint, inclusive code-point semantics, old frontend model, and `PageState.char_ranges_map`. The canonical replacement uses stable word IDs, Unicode grapheme indices, and half-open spans.
 
+## Outcome
+
+The replacement landed. `tests/unit/api/test_typography_clean_break.py` asserts that the OpenAPI schema has no `char-ranges` path and that legacy `char_ranges` and `char_ranges_map` payloads are rejected. The inventory's next step, replacing the contract before deleting the endpoint, is done.
+
 ## Next steps
 
-Replace the legacy contract with the canonical typography API and grapheme editor. Then remove the listed code, tests, generated types, and active documentation references in the same reviewed branch.
+None for this inventory. Remaining typography work is suggestion acceptance and predecessor undo, tracked in the [roadmap](../context/intent-map.md).
 
 ## What this does NOT establish
 

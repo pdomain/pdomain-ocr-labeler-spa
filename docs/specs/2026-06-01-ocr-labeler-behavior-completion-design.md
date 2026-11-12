@@ -10,6 +10,10 @@ last_verified: 2026-07-13
 
 Date: 2026-06-01
 
+Shipped behavior is in `docs/architecture/`. This June design is not the roadmap. Edited-image OCR and
+`erase_page_pixels` exist. The live list is [the intent map](../context/intent-map.md). Do not treat the deferred
+list below as current without checking that map.
+
 ## Purpose
 
 Finish the OCR labeler product behavior surface by replacing stale compatibility

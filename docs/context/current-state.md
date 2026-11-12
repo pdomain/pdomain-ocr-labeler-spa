@@ -3,7 +3,7 @@ kind: context
 status: active
 owner: maintainers
 created: 2026-07-13
-last_verified: 2026-11-07
+last_verified: 2026-11-12
 ---
 
 # Current state
@@ -13,7 +13,7 @@ last_verified: 2026-11-07
 - **Kind:** context
 - **Status:** active
 - **Owner:** maintainers
-- **Last verified:** 2026-11-07
+- **Last verified:** 2026-11-12
 - **Read when:** orienting on shipped behavior, open work, or repository risk.
 - **Search terms:** current state, shipped, open work, risks, roadmap.
 
@@ -32,11 +32,10 @@ Acknowledgement checks the actual project, page, panel, selected IDs, and
 current ready generation. Content changes do not navigate another viewer.
 Tesseract is an explicit CPU provider; the default remains DocTR.
 
-These matching APIs are unreleased. This branch requires the reviewed local
-contracts wheel `0.2.2.dev1+g1bd8261b5` for integration. The committed lockfile
-still selects published `0.2.1`; use an isolated environment and explicit
-no-sync when retaining the local wheel. This work does not authorize a
-release, merge, or push.
+The P3-F2 branch merged to master as `1445e173`. `pyproject.toml` requires
+`pdomain-book-contracts>=0.3.0`, and `uv.lock` selects published `0.3.0`.
+That replaces the reviewed local contracts wheel and the earlier v0.2.1 pin.
+See the 2026-11-09 decision in [`decisions.md`](decisions.md).
 
 ## Shipped system
 
@@ -53,10 +52,10 @@ its text and typography review requirements.
 
 Detailed line and stanza writes require the word IDs stored in prepared
 bundles. Loose mirrors support ordinary region acceptance and column review.
-The published region-review baseline requires `pdomain-book-contracts>=0.2.1`.
-The lockfile selects published v0.2.1 from the pdomain package index, and that
-baseline needs no local wheel override. The unreleased matching branch above
-requires its isolated dev1 wheel and explicit no-sync environment instead.
+The published region-review baseline requires `pdomain-book-contracts>=0.3.0`.
+`uv.lock` selects published `0.3.0` from the pdomain package index. The
+2026-11-09 decision records the merge and the browser check of
+`0.6.1.dev16+g1445e1730`.
 
 Fine-grained typography phase one is shipped on this branch. The SPA uses
 `TypographySection`, server-authoritative grapheme/taxonomy metadata, and an
@@ -195,79 +194,17 @@ See the 2026-09-18 tombstones in `decisions.md` for what each triage found.
 
 ## Open work
 
-[The issue index](../issues/README.md) now tracks a runtime compatibility failure. The 18
-deep-review reports filed under `docs/issues/2026-07-21-*`, the two migrated
-GitHub records, and every report filed and closed same-day are resolved and
-deleted; each retirement's reasoning is a tombstone in `decisions.md`, which
-is the authoritative record, not this list.
-The retired July deep-review plan prioritized Waves 0–6. Its outcomes remain in the 2026-09-17 and 2026-09-18
-decision entries; focused plans retain unfinished work.
+The live list is the [roadmap](intent-map.md). This section only names what is in progress now.
 
-Glyph annotations (M11) — the manual review path is shipped. A person
-selects a word, marks its ligatures, long s or swash, or marks it reviewed
-with no marks; the mark persists through save and reload; a bulk apply
-persists and refreshes the page. The dataset export writes a
-`recognition/glyph_features.json` sidecar so those human marks reach
-recognition evaluation, keyed by crop id
-(`core/jobs/handlers/glyph_sidecar.py`). No glyph predictor exists and none
-will be built here (decided 2026-09-18) — the accept-prediction button never
-fires; the seam stays, rendering nothing. A glyph chip click now selects the
-word and opens the review panel, same as the pencil button. Browser
-coverage: `tests/e2e/test_glyph_panel.py` (single-word mark) and
-`tests/e2e/test_bulk_glyph_mark.py` (a real bulk-apply dialog, confirmed
-against an independent `GET`). See `decisions.md`'s 2026-09-18 entries and
-[`../plans/2026-07-21-glyph-annotations-completion.md`](../plans/2026-07-21-glyph-annotations-completion.md).
-Current contract: [glyph architecture](../architecture/20-glyph-annotations.md).
+Typography suggestion acceptance and predecessor undo are still open. The glyph picker does not yet offer every shared
+ligature kind. Export-dialog history, the right-panel shell comparison, driver-contract section 2.11, U-M6 history
+boundaries, and `noUncheckedIndexedAccess` in `tsconfig.test.json` are the other labeler items. One region-membership
+write can still renumber every word on the page.
 
-**What remains, verified against code or `decisions.md` rather than assumed:**
-
-- **Word-identity and empty-page races are closed.** The 2026-09-18 decision entries record stable OCR-derived
-  identity after GT edits and lock-protected payload/history construction. Coverage includes
-  `tests/integration/test_typography_word_id_survives_gt_edit.py` and
-  `tests/integration/test_page_history_consistency_race.py`.
-- **`set_region_word_membership` can renumber every line on a page** — a
-  known gap in `stable_word_id` and reading-order keying, recorded in its own
-  docstring (`api/regions.py`) and pinned by
-  `tests/integration/test_region_membership_word_identity.py`. Outside the
-  sidecar-reindex family closed 2026-09-18 (below).
-- **Region carry-forward's rejection gap is fixed** (2026-09-18): a new
-  proposal matching one a person's latest decision rejected now gets a carried
-  `rejected` decision of its own, and a confirmed region whose accepting
-  decision never reached the log still carries, reconstructed from the block's
-  `source_proposal_id`. A hand-drawn region stays deliberately uncarried; see
-  `core/jobs/handlers/propose_regions.py::_origin_reference_for_region`.
-  A collapsed panel in the right panel counts carried rejections and brings one
-  back; un-rejecting appends a `reopened` decision rather than rewriting the
-  original, so the journal stays evidence.
-- ~~Whether the OCR engine should warm up at server start~~ — decided
-  2026-09-18: no. The predictor stays lazy; see `decisions.md`.
-- **Out-of-order frontend refetches are fixed** by commit `a0d79d5e`; older page responses no longer overwrite
-  newer page state.
-- **Released `v0.3.0` on 2026-09-18**, 561 commits after `v0.2.0`, with the pip
-  index regenerated. `docs/runbooks/release.md` has the steps.
-- PGDP/pdomain-ui alignment remains partial. The [residual plan](../plans/2026-07-21-pgdp-alignment-remaining.md)
-  retains persisted export-dialog history, the detail-shell comparison, and remaining driver/adapter documentation.
-  Cards, progress filters, suite launch, jobs, and visible page history ship. Archive and shared-workbench adoption
-  were declined; the September decisions record those outcomes.
-- Open findings, keyboard entries now closed (`6db2e42` registered `mod+,`,
-  `mod+j` and `mod+shift+r`; BUG-KBD-4 was already done). The XDG data root
-  default (BUG-SMOKE-3) is now closed too — see `decisions.md`.
-  [`open-findings.md`](open-findings.md) records all six findings closed, including zero-area placeholders, empty
-  OCR, and hierarchy waits.
-- Residual test-tsconfig strictness (#366 leftover), untouched 2026-09-18:
-  [`../plans/2026-07-21-tsconfig-test-strictness.md`](../plans/2026-07-21-tsconfig-test-strictness.md).
-- Already done (do not re-plan): #404 lint-deviations catalogue
-  (`docs/process/lint-deviations.md`), #430 CI-equivalence and #433 OpenAPI
-  drift (moot — the GitHub workflows they described are deleted), #437
-  OpenAPI schema quality tests, #460 resolver narrowing, BUG-KBD-1/4/5.
-
-A family of eleven routes was fixed 2026-09-18 where per-word char-bbox, glyph,
-and glyph-prediction sidecar maps did not follow their words through
-structural edits (word/line/paragraph delete, merge, split, and add) — see
-"Per-word sidecars did not follow their words" in `decisions.md`. Word split
-now refuses rather than orphan a word's sidecars; every shifting route
-reindexes; `set_region_word_membership` (above) is adjacent and not part of
-this family.
+Closed waves, the six findings, and the sidecar reindex are recorded under Done in the roadmap and in
+[`decisions.md`](decisions.md). The labeler tag `v0.3.0` is under Done in the roadmap. It is not a contracts release.
+The one open governed defect is the
+[memfd issue](../issues/2026-11-07-python-build-without-memfd-breaks-labeling-bundles.md), also listed under Risks.
 
 ## Risks
 

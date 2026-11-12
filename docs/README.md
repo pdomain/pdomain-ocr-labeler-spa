@@ -3,7 +3,7 @@ kind: process
 status: active
 owner: maintainers
 created: 2026-05-19
-last_verified: 2026-07-13
+last_verified: 2026-11-12
 ---
 
 # docs/
@@ -50,16 +50,19 @@ This layout is workspace-standard; see
 - `architecture/00-overview.md` through `architecture/28-palettes-pickers.md` — per-feature design reference
 - [Glyph annotations](architecture/20-glyph-annotations.md) — manual review, persistence, and export.
 - [Page loading and history](architecture/29-page-loading-and-history.md) — cold-page jobs and version navigation.
+- [Repository boundaries](architecture/30-repository-boundaries.md) — what this SPA owns, and which sibling repo owns
+  the rest.
+- [Typography review](architecture/31-typography-review.md) — shipped inline-typography contract.
 
 ### context/
 
 - [`context/current-state.md`](context/current-state.md) — shipped behavior, open work, and risks
-- [`context/intent-map.md`](context/intent-map.md) — active, deferred, blocked, and rejected intent
+- [`context/intent-map.md`](context/intent-map.md) — the roadmap: now, next, later, and rejected work
 - [`context/decisions.md`](context/decisions.md) — durable decisions and retirement tombstones
 - [`context/completed-github-issues-ledger.md`](context/completed-github-issues-ledger.md)
   — completed issue provenance, coverage, and deletion status
 - [`context/retirement-manifest.md`](context/retirement-manifest.md) — per-document outcomes and replacements
-- [`context/open-findings.md`](context/open-findings.md) — unresolved defects transferred from the retired bug ledger
+- [`context/open-findings.md`](context/open-findings.md) — six findings, all closed on 2026-09-18
 
 ### issues/
 
@@ -73,6 +76,19 @@ This layout is workspace-standard; see
 
 ### specs/
 
-- [Behavior completion design](specs/2026-06-01-ocr-labeler-behavior-completion-design.md)
+Shipped behavior is under `architecture/`. These files keep unfinished design and the executable behavior contracts.
+
+- [Typography design](specs/2026-08-21-typography-review-and-training-export-design.md) — suggestion undo and the open
+  owner choices. Shipped phase one is [architecture/31](architecture/31-typography-review.md).
+- [Undo across re-OCR](specs/2026-06-12-event-store-undo.md) — U-M6. Shipped undo and U-M7 are [architecture/29](architecture/29-page-loading-and-history.md).
+- [Page-load progress](specs/2026-08-08-page-load-progress-design.md) — the finer predictor-build stage. Shipped
+  cold-page jobs are [architecture/29](architecture/29-page-loading-and-history.md).
+- [Behavior completion design](specs/2026-06-01-ocr-labeler-behavior-completion-design.md) — June design. Do not treat
+  its deferred list as the roadmap.
 - [`specs/behavior/README.md`](specs/behavior/README.md) — behavior contracts and coverage
-- [`../specs/README.md`](../specs/README.md) — milestone, decision, and glyph specifications
+- [`../specs/README.md`](../specs/README.md) — historical milestones and the ADR log
+
+### research/
+
+- [CharRange deletion inventory](research/2026-08-22-char-range-deletion-inventory.md) — the clean break found nothing
+  to migrate, and the legacy route is gone.

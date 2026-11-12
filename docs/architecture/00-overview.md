@@ -259,38 +259,12 @@ applies uniformly. Examples:
 
 ---
 
-## Milestone contract for AI agents
+## Shipped milestones
 
-Every milestone in [`16-milestones.md`](../../specs/16-milestones.md) follows this
-format:
+M0 through M11 shipped by the 2026-05-21 cut-over, including M9.1, M9.2, and M9.5. The acceptance write-ups remain in
+[`specs/16-milestones.md`](../../specs/16-milestones.md) as history. They are not the live roadmap.
 
-```
-## Mn — short title
-
-**Outcome.** One paragraph describing what works at end of milestone.
-
-**Files to create / modify.**
-- src/pdomain_ocr_labeler_spa/api/...
-- frontend/src/pages/...
-- tests/...
-
-**Specs that govern this milestone.**
-- specs/0X-foo.md  (the must-read parts)
-
-**Acceptance tests.**
-- pytest: tests/unit/test_foo.py::test_bar
-- vitest: frontend/src/.../foo.test.tsx
-- playwright: tests/e2e/test_milestone_n.py
-
-**Rollback.** Anything that's not isolated to the listed files.
-
-**Pre-conditions.** What earlier milestones must already exist.
-```
-
-The spec author's bet is that an AI agent given just (a) the listed
-spec files, (b) the listed acceptance tests, and (c) the previous
-milestone's working state can deliver the milestone in a single coding
-session. If a milestone is too big, split it.
+Future work is the [roadmap](../context/intent-map.md). Repository ownership is [repository boundaries](30-repository-boundaries.md).
 
 ---
 
@@ -313,11 +287,11 @@ session. If a milestone is too big, split it.
 | Driver-agent compat | `13-driver-contract.md` |
 | Tests | `14-testing.md` |
 | Build / install | `15-deployment-dev.md` |
-| Roadmap | `../../specs/16-milestones.md` |
-| ADR log | `../../specs/17-decisions.md` |
+| Roadmap | [`../context/intent-map.md`](../context/intent-map.md) |
+| ADR log | [`../../specs/17-decisions.md`](../../specs/17-decisions.md) |
 | Text normalization | `18-text-normalization.md` |
 | Auto-rotation (M9.1/M9.2) | `19-auto-rotation.md` |
-| Glyph annotations (M11) | `../../specs/20-glyph-annotations.md` |
+| Glyph annotations (M11) | [`20-glyph-annotations.md`](20-glyph-annotations.md) |
 | Konva renderer impl | `21-konva-renderer.md` |
 | Page surface wire-up | `22-page-surface-wireup.md` |
 | Page payload backend impl | `23-page-payload-backend.md` |
@@ -326,6 +300,9 @@ session. If a milestone is too big, split it.
 | Right-panel detail views | `26-right-panel-detail.md` |
 | Right-panel action sections | `27-right-panel-sections.md` |
 | Palettes and pickers | `28-palettes-pickers.md` |
+| Page loading and history | [`29-page-loading-and-history.md`](29-page-loading-and-history.md) |
+| Repository ownership | [`30-repository-boundaries.md`](30-repository-boundaries.md) |
+| Typography review | [`31-typography-review.md`](31-typography-review.md) |
 
 If a question isn't answered by the linked spec, **stop and add it to
 [`OPEN_QUESTIONS.md`](../../OPEN_QUESTIONS.md)** rather than guessing.

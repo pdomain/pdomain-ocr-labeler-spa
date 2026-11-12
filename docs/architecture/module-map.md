@@ -159,22 +159,27 @@ Major groups:
 
 ### Python
 
-| Package | Min version | Used for |
-|---------|-------------|----------|
-| `pdomain-book-tools` | `>=0.14.1` | OCR page models, glyph annotations (`pdomain_book_tools.ocr.page`) |
+| Package | Required | Used for |
+|---------|-----------|----------|
+| `pdomain-book-tools` | `==0.30.1` | OCR runtime and page models |
+| `pdomain-book-contracts` | `>=0.3.0` (lockfile `0.3.0`) | Annotation, glyph, layout, and P3-F2 alignment contracts |
 | `pdomain-ops` | `>=0.11.2` | Suite bootstrap/routes, device preferences, shared paths, page records and aggregates, local persistence, provenance, and export schemas |
+| `pdomain-pgdp-measure` | `>=0.1.0` | Book-scoped page-kind measurement |
 
 ### npm
 
 | Package | Version | Used for |
 |---------|---------|----------|
-| `@pdomain/pdomain-ui` | `^0.11.0` | `PageImageCanvas`, `AppShell`, `WordList`, shared primitives, status panels, and icons |
+| `@pdomain/pdomain-ui` | `^0.13.0` | `PageImageCanvas`, `AppShell`, `WordList`, shared primitives, status panels, and icons |
+
+Who owns which job is in [repository boundaries](30-repository-boundaries.md).
 
 Evidence:
 
 - Code: `pyproject.toml` and `frontend/package.json`
-- Lockfiles: `uv.lock` and `frontend/pnpm-lock.yaml`
-- Verified: 2026-07-19 against the current manifests and lockfiles
+- Lockfiles: `uv.lock` selects `pdomain-book-contracts` `0.3.0` and `pdomain-book-tools` `0.30.1`.
+  `frontend/pnpm-lock.yaml` is the npm lock.
+- Verified: 2026-11-12 against those manifests. The 2026-07-19 pass recorded the older pins.
 
 ---
 

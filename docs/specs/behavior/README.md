@@ -11,6 +11,14 @@ last_verified: 2026-07-13
 These specs are the source of truth for behavior-driven E2E coverage in
 `pdomain-ocr-labeler-spa`.
 
+The standalone word-edit dialog was removed. Persistent right-panel editing
+replaced it. Character-range authoring was replaced by typography spans. See
+[typography review](../../architecture/31-typography-review.md) and the
+2026-09-18 entries in [`docs/context/decisions.md`](../../context/decisions.md).
+`component-dialogs-actions.md` still describes the old dialog. Reconcile it
+before treating those IDs as current. The roadmap item is in
+[the intent map](../../context/intent-map.md).
+
 ## Behavior documents
 
 - [`component-canvas.md`](component-canvas.md)

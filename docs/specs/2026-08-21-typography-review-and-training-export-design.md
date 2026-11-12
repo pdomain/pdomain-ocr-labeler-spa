@@ -9,8 +9,10 @@ repo: pdomain/pdomain-ocr-labeler-spa
 
 # Typography review and training export design
 
-Phase-one typography review, the correction journal, and immutable export ship today. Suggestion acceptance and
-editing, predecessor-based undo, and the unresolved owner decisions remain design work.
+Phase-one typography review, the correction journal, and immutable export ship today. The present-tense contract is
+[typography review](../architecture/31-typography-review.md). Suggestion acceptance and editing, predecessor-based
+undo, and the unresolved owner decisions remain design work. The roadmap is
+[the intent map](../context/intent-map.md).
 
 ## Agent Index
 

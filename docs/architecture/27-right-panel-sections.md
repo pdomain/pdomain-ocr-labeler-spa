@@ -18,7 +18,8 @@ last_verified: 2026-07-13
 
 The accordion sections are specialist editing tools mounted inside `WordDetail`.
 
-`TypographySection` is the canonical typography accordion. It supports
+`TypographySection` is the canonical typography accordion. The shipped review contract is
+[typography review](31-typography-review.md). It supports
 adjacent, overlapping, and whole-word extended-grapheme spans by appending to
 the correction journal. It does not write character-range sidecars or whole-word
 OCR style labels. Suggestion acceptance and predecessor undo remain future work.

@@ -3,22 +3,25 @@ kind: spec
 status: active
 owner: maintainers
 created: 2026-05-06
-last_verified: 2026-07-13
+last_verified: 2026-11-12
 ---
 
 # `pdomain-ocr-labeler-spa` Specs
 
 Numbered design documents.
 
-> **Specs are the source of truth.** Code that disagrees with a spec is
-> wrong; if reality forces a change, change the spec first, then the code.
+> **Shipped behavior lives in `docs/architecture/`.** If code and an
+> architecture doc disagree, change the architecture doc to match the code,
+> with evidence. Unfinished design stays in `docs/specs/`. The roadmap is
+> [`docs/context/intent-map.md`](../docs/context/intent-map.md).
 
 ## Layout (2026-05-14 split)
 
 Specs are now organized into two trees:
 
-- **`specs/`** (this directory) — **active** design docs: living roadmap,
-  the ADR log, and specs whose functionality has not yet landed.
+- **`specs/`** (this directory) — historical milestone acceptance and the
+  ADR log. The live roadmap is
+  [`docs/context/intent-map.md`](../docs/context/intent-map.md).
 - **`../docs/architecture/`** — specs that describe **implemented**
   functionality (every child issue closed, code shipped). These remain
   authoritative architecture references; they were moved out of `specs/`
@@ -28,8 +31,8 @@ Specs are now organized into two trees:
 
 | # | File | Topic |
 |---|---|---|
-| 16 | [`16-milestones.md`](16-milestones.md) | M0…M9 milestone breakdown — living roadmap |
-| 17 | [`17-decisions.md`](17-decisions.md) | ADRs / decisions log — append-only |
+| 16 | [`16-milestones.md`](16-milestones.md) | M0–M11 acceptance history. Not the live roadmap. |
+| 17 | [`17-decisions.md`](17-decisions.md) | ADRs D-001–D-054 — append-only |
 
 Glyph annotations now live in [architecture](../docs/architecture/20-glyph-annotations.md) . Their picker enum
 parity remains in the [residual plan](../docs/plans/2026-07-21-glyph-annotations-completion.md) .
@@ -62,8 +65,11 @@ parity remains in the [residual plan](../docs/plans/2026-07-21-glyph-annotations
 | 24 | [`../docs/architecture/24-shell-layout.md`](../docs/architecture/24-shell-layout.md) | Studio shell — 5-zone grid, Rail, Drawer, Breadcrumb, QuickSearch |
 | 25 | [`../docs/architecture/25-drawer-worklist.md`](../docs/architecture/25-drawer-worklist.md) | Drawer — Worklist, Hierarchy, BulkActions |
 | 26 | [`../docs/architecture/26-right-panel-detail.md`](../docs/architecture/26-right-panel-detail.md) | Right-panel detail views — WordDetail, LineDetail, BlockDetail |
-| 27 | [`../docs/architecture/27-right-panel-sections.md`](../docs/architecture/27-right-panel-sections.md) | Right-panel action sections — BBox / Rebox / Erase / CharRanges / CharFixer / Structure |
+| 27 | [`../docs/architecture/27-right-panel-sections.md`](../docs/architecture/27-right-panel-sections.md) | Right-panel action sections — BBox / Rebox / Erase / Typography / CharFixer / Structure |
 | 28 | [`../docs/architecture/28-palettes-pickers.md`](../docs/architecture/28-palettes-pickers.md) | StylePalette, ComponentPalette, UnicodePicker, useLayerColors |
+| 29 | [`../docs/architecture/29-page-loading-and-history.md`](../docs/architecture/29-page-loading-and-history.md) | Cold-page jobs, undo/redo, history jumps |
+| 30 | [`../docs/architecture/30-repository-boundaries.md`](../docs/architecture/30-repository-boundaries.md) | What this SPA owns versus sibling repositories |
+| 31 | [`../docs/architecture/31-typography-review.md`](../docs/architecture/31-typography-review.md) | Shipped inline-typography review |
 
 ## Conventions in these specs
 

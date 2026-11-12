@@ -3,7 +3,7 @@ kind: context
 status: active
 owner: maintainers
 created: 2026-07-13
-last_verified: 2026-09-18
+last_verified: 2026-11-12
 ---
 
 # Decisions
@@ -13,7 +13,7 @@ last_verified: 2026-09-18
 - **Kind:** context
 - **Status:** active
 - **Owner:** maintainers
-- **Last verified:** 2026-09-18
+- **Last verified:** 2026-11-12
 - **Read when:** looking for durable migration, lifecycle, or changed-direction rationale.
 - **Search terms:** decisions, tombstones, retirement, changed direction, docgraph,
   sidecar durability, char_ranges_map, labeler_sidecars, XDG_CONFIG_HOME,
@@ -2148,3 +2148,27 @@ projects through their Open buttons and kept them across a page reload.
   sign-off page, so it goes with the page. The retirement manifest records the old path. Read it with
   `git show ee95c833:docs/archive/specs/M0-acceptance.md`.
 - Remaining work: none
+
+## 2026-11-12 — One roadmap, and shipped behavior stays in architecture
+
+### Context
+
+The live plan was split across `docs/context/intent-map.md`, `docs/context/current-state.md`, three partial plans, four
+partial specs, and `specs/16-milestones.md`. Milestone acceptance is finished. Several jobs named in the typography
+design already have their own repositories on disk.
+
+### Decision
+
+`docs/context/intent-map.md` is the roadmap. `docs/architecture/` is the present-tense description of shipped behavior,
+including new `30-repository-boundaries.md` and `31-typography-review.md`. `specs/16-milestones.md` stays as acceptance
+history. `specs/17-decisions.md` stays the ADR log. Partial specs stay while they still hold unfinished design.
+Behavior unit specs stay as the E2E contract, with the known stale word-edit dialog called out rather than rewritten in
+this pass.
+
+Do not create a new repository for training, synthetic data, source preparation, or a glyph predictor. Those jobs
+belong in the sibling repositories named in `30-repository-boundaries.md`.
+
+### Consequences
+
+Agents should change an architecture doc when shipped code and that doc disagree. They should add new product work to
+the intent map instead of extending `specs/16-milestones.md`.
