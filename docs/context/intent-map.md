@@ -50,6 +50,8 @@ Build these in this repository.
   removed word-edit dialog and character-range mutations. `docs/specs/behavior/unclear-items.md` still questions
   page-level erase, while `erase_page_pixels` exists. Check [`decisions.md`](decisions.md) before treating an unclear
   item as open.
+- Refuse verified image loads when the Python build has no memfd sealing.
+  `feature/memfd-tsconfig-state` has that fix in `5e8b1781..986f01a5`.
 
 ## Next
 
