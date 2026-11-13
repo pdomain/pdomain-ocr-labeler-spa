@@ -190,6 +190,10 @@ export function BBoxSection({ word, projectId, pageIndex, refineTracking }: BBox
   // — an incoming resync leaves this one field alone (see the module doc
   // comment above) rather than disabling all of them.
   const [focusedField, setFocusedField] = useState<BBoxField | null>(null);
+  // Typed text for the focused coordinate. A controlled number snaps an
+  // emptied field back to 0, so the next digits append ("0777") instead of
+  // replacing what the user cleared.
+  const [focusedRaw, setFocusedRaw] = useState<string | null>(null);
 
   // Track word identity for potential future key-based reset.
   const wordKey = `${word.line_index}-${word.word_index ?? 0}`;
@@ -206,6 +210,7 @@ export function BBoxSection({ word, projectId, pageIndex, refineTracking }: BBox
   if (wordKey !== prevWordKey) {
     setPrevWordKey(wordKey);
     setFocusedField(null);
+    setFocusedRaw(null);
   }
 
   // Keep a ref to the original bbox for Reset.
@@ -301,9 +306,16 @@ export function BBoxSection({ word, projectId, pageIndex, refineTracking }: BBox
   }
 
   function handleChange(field: BBoxField, value: string) {
+    setFocusedRaw(value);
+    if (value.trim() === "" || value === "-" || value === "." || value === "-.") return;
     const num = Number(value);
     if (!Number.isFinite(num)) return;
     setDraft((prev) => ({ ...prev, [field]: num }));
+  }
+
+  function fieldValue(field: BBoxField): number | string {
+    if (focusedField === field && focusedRaw !== null) return focusedRaw;
+    return draft[field];
   }
 
   function commitBbox(bbox: BBox) {
@@ -316,10 +328,12 @@ export function BBoxSection({ word, projectId, pageIndex, refineTracking }: BBox
 
   function handleFocus(field: BBoxField) {
     setFocusedField(field);
+    setFocusedRaw(String(draft[field]));
   }
 
   function handleBlur(field: BBoxField, value: string) {
     setFocusedField((current) => (current === field ? null : current));
+    setFocusedRaw(null);
     const num = Number(value);
     if (!Number.isFinite(num)) return;
     const updated: BBox = { ...draft, [field]: num };
@@ -369,7 +383,7 @@ export function BBoxSection({ word, projectId, pageIndex, refineTracking }: BBox
             data-testid="bbox-input-x"
             type="number"
             size="sm"
-            value={draft.x}
+            value={fieldValue("x")}
             onChange={(e) => {
               handleChange("x", e.target.value);
             }}
@@ -388,7 +402,7 @@ export function BBoxSection({ word, projectId, pageIndex, refineTracking }: BBox
             data-testid="bbox-input-y"
             type="number"
             size="sm"
-            value={draft.y}
+            value={fieldValue("y")}
             onChange={(e) => {
               handleChange("y", e.target.value);
             }}
@@ -407,7 +421,7 @@ export function BBoxSection({ word, projectId, pageIndex, refineTracking }: BBox
             data-testid="bbox-input-w"
             type="number"
             size="sm"
-            value={draft.width}
+            value={fieldValue("width")}
             onChange={(e) => {
               handleChange("width", e.target.value);
             }}
@@ -426,7 +440,7 @@ export function BBoxSection({ word, projectId, pageIndex, refineTracking }: BBox
             data-testid="bbox-input-h"
             type="number"
             size="sm"
-            value={draft.height}
+            value={fieldValue("height")}
             onChange={(e) => {
               handleChange("height", e.target.value);
             }}

@@ -3,7 +3,7 @@ kind: context
 status: active
 owner: maintainers
 created: 2026-07-13
-last_verified: 2026-11-12
+last_verified: 2026-11-13
 ---
 
 # Intent map
@@ -16,7 +16,7 @@ This is the roadmap. Shipped behavior lives in [`docs/architecture/`](../archite
 - **Kind:** context
 - **Status:** active
 - **Owner:** maintainers
-- **Last verified:** 2026-11-12
+- **Last verified:** 2026-11-13
 - **Read when:** deciding what to build next, what remains intentionally
   parked, or which repository should own a new job.
 - **Search terms:** roadmap, active intent, deferred, blocked, rejected,
@@ -80,8 +80,8 @@ Auth, S3, Postgres, and managed adapters stay deferred under D-042 until there i
 
 - **Converged PageRecord imports without widening the shared schema.** Callers import `PageRecord` and `RotationSource`
   from `pdomain_ops.pages`. The `core.models` compatibility exports are removed. Labeler-only view state stays in `extensions["labeler"]`.
-- **Published contracts v0.3.0.** `pyproject.toml` requires `pdomain-book-contracts>=0.3.0`. `uv.lock` selects `0.3.0`.
-  The P3-F2 branch merged to master as `1445e173`. This replaces the earlier local wheel and the v0.2.1 pin.
+- **Published contracts v0.3.0.** The P3-F2 branch merged to master as `1445e173` and required
+  `pdomain-book-contracts>=0.3.0`. This replaces the earlier local wheel and the v0.2.1 pin. The lock now selects `0.3.1`.
 - **Enforced OpenAPI response contracts.** GitHub issue #437 is deleted.
 - **Accepted resolver narrowing.** Page resolvers return `Page | None`. GitHub issue #460 is deleted.
 - **Tagged the labeler `v0.3.0` on 2026-09-18.** `git rev-list --count v0.2.0..v0.3.0` is 645. The tag points at

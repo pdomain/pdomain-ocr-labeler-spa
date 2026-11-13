@@ -3,7 +3,7 @@ kind: context
 status: active
 owner: maintainers
 created: 2026-07-13
-last_verified: 2026-11-12
+last_verified: 2026-11-13
 ---
 
 # Current state
@@ -13,7 +13,7 @@ last_verified: 2026-11-12
 - **Kind:** context
 - **Status:** active
 - **Owner:** maintainers
-- **Last verified:** 2026-11-12
+- **Last verified:** 2026-11-13
 - **Read when:** orienting on shipped behavior, open work, or repository risk.
 - **Search terms:** current state, shipped, open work, risks, roadmap.
 
@@ -32,9 +32,9 @@ Acknowledgement checks the actual project, page, panel, selected IDs, and
 current ready generation. Content changes do not navigate another viewer.
 Tesseract is an explicit CPU provider; the default remains DocTR.
 
-The P3-F2 branch merged to master as `1445e173`. `pyproject.toml` requires
-`pdomain-book-contracts>=0.3.0`, and `uv.lock` selects published `0.3.0`.
-That replaces the reviewed local contracts wheel and the earlier v0.2.1 pin.
+The P3-F2 branch merged to master as `1445e173`. That replaced the reviewed
+local contracts wheel and the earlier v0.2.1 pin. `pyproject.toml` now requires
+`pdomain-book-contracts>=0.3.1`, and `uv.lock` selects published `0.3.1`.
 See the 2026-11-09 decision in [`decisions.md`](decisions.md).
 
 ## Shipped system
@@ -53,7 +53,7 @@ its text and typography review requirements.
 Detailed line and stanza writes require the word IDs stored in prepared
 bundles. Loose mirrors support ordinary region acceptance and column review.
 The published region-review baseline requires `pdomain-book-contracts>=0.3.0`.
-`uv.lock` selects published `0.3.0` from the pdomain package index. The
+`uv.lock` selects published `0.3.1` from the pdomain package index. The
 2026-11-09 decision records the merge and the browser check of
 `0.6.1.dev16+g1445e1730`.
 

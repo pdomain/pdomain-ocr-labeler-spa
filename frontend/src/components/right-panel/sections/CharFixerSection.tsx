@@ -87,14 +87,26 @@ function CoordInput({
   testId: string;
   onChange: (v: number) => void;
 }) {
+  // Keep the typed text while the field is focused. A controlled number
+  // value snaps an emptied field back to 0, so the next digit appends
+  // ("03") instead of replacing what the user cleared.
+  const [raw, setRaw] = useState<string | null>(null);
+  const shown = Math.round(value);
   return (
     <label className="flex items-center gap-1 text-[10px] text-ink-3">
       <span className="uppercase tracking-wide">{label}</span>
       <input
         type="number"
         data-testid={testId}
-        value={Math.round(value)}
+        value={raw ?? shown}
+        onFocus={() => {
+          setRaw(String(shown));
+        }}
+        onBlur={() => {
+          setRaw(null);
+        }}
         onChange={(e) => {
+          setRaw(e.target.value);
           const n = parseInt(e.target.value, 10);
           if (!isNaN(n)) onChange(n);
         }}

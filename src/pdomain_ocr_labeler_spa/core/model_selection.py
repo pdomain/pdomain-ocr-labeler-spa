@@ -38,7 +38,7 @@ import re
 from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Literal
+from typing import Literal, get_args
 
 from pdomain_ocr_labeler_spa.core.ocr_models import GetOCRConfigResponse
 
@@ -77,11 +77,11 @@ algorithm and the wire DTO.
 """
 
 # Defensive sync check — if the DTO Literal evolves the algorithm
-# must follow. ``__args__`` on Literal returns the value tuple.
+# must follow. ``get_args`` reads the Literal values.
 _selection_reason_annotation = GetOCRConfigResponse.model_fields["selection_reason"].annotation
 if _selection_reason_annotation is None:
     raise RuntimeError("selection_reason annotation must not be None")
-_DTO_REASONS = set(_selection_reason_annotation.__args__)  # type: ignore[union-attr]
+_DTO_REASONS = set(get_args(_selection_reason_annotation))
 _LOCAL_REASONS = {
     "hf-latest",
     "hf-only",

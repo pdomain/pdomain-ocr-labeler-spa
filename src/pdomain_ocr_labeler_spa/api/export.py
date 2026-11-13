@@ -126,12 +126,11 @@ class ExportRequest(BaseModel):
                 raise ValueError(
                     f"page_index must be non-negative for scope 'current'; got {self.page_index}"
                 )
-        elif self.scope == ExportScope.ALL_VALIDATED:
-            if self.page_index is not None:
-                raise ValueError(
-                    "page_index must not be supplied when scope is 'all_validated'; "
-                    "it is only meaningful for scope 'current'"
-                )
+        elif self.scope == ExportScope.ALL_VALIDATED and self.page_index is not None:
+            raise ValueError(
+                "page_index must not be supplied when scope is 'all_validated'; "
+                "it is only meaningful for scope 'current'"
+            )
         if self.detection_only and self.recognition_only:
             raise ValueError(
                 "detection_only and recognition_only cannot both be True: "

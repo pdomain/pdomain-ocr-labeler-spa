@@ -3,7 +3,7 @@ kind: architecture
 status: built
 owner: maintainers
 created: 2026-11-12
-last_verified: 2026-11-12
+last_verified: 2026-11-13
 ---
 
 # Repository boundaries
@@ -13,7 +13,7 @@ last_verified: 2026-11-12
 - **Kind:** architecture
 - **Status:** built
 - **Owner:** maintainers
-- **Last verified:** 2026-11-12
+- **Last verified:** 2026-11-13
 - **Read when:** deciding whether a new job belongs in this SPA or in a sibling repository.
 - **Search terms:** repository boundaries, sibling repos, book-tools, source-data, training, synth, predictor.
 
@@ -36,9 +36,9 @@ requires today.
 
 | Repository | Owns | How this labeler uses it |
 | --- | --- | --- |
-| `pdomain-book-tools` | OCR runtime and page models. Pinned at `0.30.1`. | DocTR prediction, layout, and image rotation. Do not reach into its internals. |
-| `pdomain-book-contracts` | Shared annotation, layout, glyph, and alignment contracts. Requires `>=0.3.0`. The lockfile selects `0.3.0`. | Region roles, page kinds, glyph wire values, and P3-F2 alignment. |
-| `pdomain-ops` | Suite page records, paths, provenance, and export schemas. Requires `>=0.11.2`. | `PageRecord` and shared lifecycle types. Labeler-only view state stays in `extensions["labeler"]`. |
+| `pdomain-book-tools` | OCR runtime and page models. Pinned at `0.31.0`. | DocTR prediction, layout, and image rotation. Do not reach into its internals. |
+| `pdomain-book-contracts` | Shared annotation, layout, glyph, and alignment contracts. Requires `>=0.3.1`. The lockfile selects `0.3.1`. | Region roles, page kinds, glyph wire values, and P3-F2 alignment. |
+| `pdomain-ops` | Suite page records, paths, provenance, and export schemas. Requires `>=0.12.2`. | `PageRecord` and shared lifecycle types. Labeler-only view state stays in `extensions["labeler"]`. |
 | `pdomain-pgdp-measure` | Page measurement. Requires `>=0.1.0`. | Book-scoped page-kind proposals. |
 | `pdomain-ui` | Shared shell, canvas, and worklist chrome. The frontend requires `^0.13.0`. | App shell and shared primitives. Domain panels stay local. |
 | `pdomain-prep-for-pgdp` | The PGDP stage pipeline. | Structural reference only. Do not port its 24-stage product here. |
@@ -73,6 +73,6 @@ document assigns them no work.
 ## Evidence
 
 - Code: `pyproject.toml` dependency block and `frontend/package.json` `@pdomain/pdomain-ui` range.
-- Lockfile: `uv.lock` selects `pdomain-book-contracts` `0.3.0` and `pdomain-book-tools` `0.30.1`.
+- Lockfile: `uv.lock` selects `pdomain-book-contracts` `0.3.1`, `pdomain-book-tools` `0.31.0`, and `pdomain-ops` `0.12.2`.
 - Decision: [`docs/context/decisions.md`](../context/decisions.md) entry "2026-11-09 — Use published contracts v0.3.0".
-- Verified: 2026-11-12 by reading those manifests and the sibling `README.md` or `AGENTS.md` files named above.
+- Verified: 2026-11-13 by reading those manifests and the sibling `README.md` or `AGENTS.md` files named above.
