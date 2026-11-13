@@ -16,10 +16,12 @@ human review of clarity, but does force at least basic accuracy.
 from __future__ import annotations
 
 import re
+import subprocess
 from pathlib import Path
 
 DOC = Path(__file__).resolve().parents[2] / "docs" / "process" / "DEVELOPMENT.md"
 MAKEFILE = Path(__file__).resolve().parents[2] / "Makefile"
+JUSTFILE = Path(__file__).resolve().parents[2] / "justfile"
 MISE = Path(__file__).resolve().parents[2] / "mise.toml"
 
 
@@ -33,11 +35,26 @@ def test_development_doc_references_only_existing_make_targets() -> None:
     body = DOC.read_text()
     referenced = set(re.findall(r"make ([a-z][a-z0-9-]*)", body))
 
-    mk = MAKEFILE.read_text()
-    targets = set(re.findall(r"^([a-z][a-z0-9_-]*):", mk, re.MULTILINE))
+    result = subprocess.run(
+        ["just", "--justfile", str(JUSTFILE), "--summary"],
+        capture_output=True,
+        text=True,
+        timeout=20,
+    )
+    assert result.returncode == 0, result.stderr
+    targets = set(result.stdout.split())
 
     missing = referenced - targets
     assert not missing, f"DEVELOPMENT.md references make targets that don't exist: {missing}"
+    for target in sorted(referenced):
+        forwarded = subprocess.run(
+            ["make", "--directory", str(MAKEFILE.parent), "--dry-run", target],
+            capture_output=True,
+            text=True,
+            timeout=20,
+        )
+        assert forwarded.returncode == 0, forwarded.stderr
+        assert f"just {target}" in forwarded.stdout, forwarded.stdout
 
 
 def test_development_doc_pins_match_mise_toml() -> None:

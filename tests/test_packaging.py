@@ -142,7 +142,14 @@ def test_makefile_build_uses_explicit_sdist_and_wheel() -> None:
     explicitly from the source tree (``uv build --sdist`` then
     ``uv build --wheel``) eliminates this failure mode.
     """
-    makefile = (REPO_ROOT / "Makefile").read_text(encoding="utf-8")
+    result = subprocess.run(
+        ["just", "--justfile", str(REPO_ROOT / "justfile"), "--show", "build"],
+        capture_output=True,
+        text=True,
+        timeout=20,
+    )
+    assert result.returncode == 0, result.stderr
+    makefile = result.stdout
     assert "uv build --sdist" in makefile and "uv build --wheel" in makefile, (
         "Makefile `build` target must run `uv build --sdist` and `uv build --wheel` "
         "as separate explicit commands (not bare `uv build`). "

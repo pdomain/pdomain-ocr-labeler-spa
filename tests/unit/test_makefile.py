@@ -17,6 +17,7 @@ import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 MAKEFILE = REPO_ROOT / "Makefile"
+JUSTFILE = REPO_ROOT / "justfile"
 
 
 def _have_make() -> bool:
@@ -51,28 +52,31 @@ def test_makefile_help_target_runs() -> None:
 
 @pytest.mark.skipif(not _have_make(), reason="`make` not on PATH")
 def test_makefile_dry_run_test_target() -> None:
-    """`make -n test` should dry-run-render the test recipe without errors.
+    """`just --show test` should dry-run-render the test recipe without errors.
 
     `-n` (no-exec) tells make to print the recipe lines without running
     them, which exercises the parser + variable expansion. A typo in any
     target the recipe depends on would surface here.
     """
     result = subprocess.run(
-        ["make", "-C", str(REPO_ROOT), "AI=", "-n", "test"],
+        ["just", "--justfile", str(JUSTFILE), "--show", "test"],
         capture_output=True,
         text=True,
         timeout=20,
     )
     assert result.returncode == 0, (
-        f"`make -n test` failed (rc={result.returncode}):\nstdout:\n{result.stdout}\nstderr:\n{result.stderr}"
+        f"`just --show test` failed (rc={result.returncode}):\n"
+        f"stdout:\n{result.stdout}\nstderr:\n{result.stderr}"
     )
     # Recipe should mention pytest somewhere.
-    assert "pytest" in result.stdout, f"`make -n test` did not render a pytest invocation:\n{result.stdout}"
+    assert "pytest" in result.stdout, (
+        f"`just --show test` did not render a pytest invocation:\n{result.stdout}"
+    )
 
 
 @pytest.mark.skipif(not _have_make(), reason="`make` not on PATH")
 def test_makefile_run_target_dry_runs_and_invokes_ui() -> None:
-    """`make -n run` should reference frontend-build and the UI entry point.
+    """`just --show run` should reference frontend-build and the UI entry point.
 
     `make run` is the user-facing "just run the labeler" target —
     distinct from `make dev` (which expects Vite on :5173). It must:
@@ -85,22 +89,23 @@ def test_makefile_run_target_dry_runs_and_invokes_ui() -> None:
     flipping `--reload` back on.
     """
     result = subprocess.run(
-        ["make", "-C", str(REPO_ROOT), "AI=", "-n", "run"],
+        ["just", "--justfile", str(JUSTFILE), "--show", "run"],
         capture_output=True,
         text=True,
         timeout=20,
     )
     assert result.returncode == 0, (
-        f"`make -n run` failed (rc={result.returncode}):\nstdout:\n{result.stdout}\nstderr:\n{result.stderr}"
+        f"`just --show run` failed (rc={result.returncode}):\n"
+        f"stdout:\n{result.stdout}\nstderr:\n{result.stderr}"
     )
     out = result.stdout
     # Either the recipe shells out to frontend-build, or it depends on
     # it (in which case `make -n` renders the dependency's recipe
     # first). Either way the dry-run output must mention the SPA build.
     assert "frontend-build" in out or "Building frontend" in out, (
-        f"`make -n run` should ensure the SPA is built before serving:\n{out}"
+        f"`just --show run` should ensure the SPA is built before serving:\n{out}"
     )
-    assert "pdomain-ocr-labeler-ui" in out, f"`make -n run` should launch pdomain-ocr-labeler-ui:\n{out}"
+    assert "pdomain-ocr-labeler-ui" in out, f"`just --show run` should launch pdomain-ocr-labeler-ui:\n{out}"
     # Must NOT enable reload or frontend-dev — those are `make dev`'s job.
     assert "--reload" not in out, f"`make run` must not enable --reload:\n{out}"
     assert "--frontend-dev" not in out, f"`make run` must not enable --frontend-dev:\n{out}"
@@ -116,7 +121,7 @@ def test_makefile_help_lists_run_target() -> None:
         timeout=20,
     )
     assert result.returncode == 0
-    assert "run " in result.stdout or "run\t" in result.stdout or "\nrun" in result.stdout, (
+    assert any(line.strip() == "run" for line in result.stdout.splitlines()), (
         f"`run` target missing from help output:\n{result.stdout}"
     )
 
@@ -187,7 +192,7 @@ def test_makefile_phony_targets_declared() -> None:
 
 def test_local_frontend_test_uses_wrapper_script() -> None:
     """The local frontend test path must isolate test-time sibling resolution."""
-    text = MAKEFILE.read_text(encoding="utf-8")
+    text = JUSTFILE.read_text(encoding="utf-8")
     assert "local-frontend-test:" in text, "local-frontend-test target missing from Makefile."
     assert "./scripts/local-frontend-test.sh" in text, (
         "local-frontend-test must run the wrapper that installs pdomain-ui as file: for Vitest."
@@ -212,36 +217,49 @@ def test_local_frontend_test_script_restores_link_overlay() -> None:
 def test_ci_calls_pre_commit_check() -> None:
     """`make ci` must invoke pre-commit-check so hooks run in CI."""
     result = subprocess.run(
-        ["make", "-C", str(REPO_ROOT), "AI=", "-n", "ci"],
+        ["just", "--justfile", str(JUSTFILE), "--show", "ci"],
         capture_output=True,
         text=True,
         timeout=20,
     )
-    assert result.returncode == 0, f"`make -n ci` failed (rc={result.returncode}):\n{result.stderr}"
-    assert "pre-commit run" in result.stdout, (
+    assert result.returncode == 0, f"`just --show ci` failed (rc={result.returncode}):\n{result.stderr}"
+    assert "pre-commit-check" in result.stdout, (
         f"`make ci` does not call pre-commit-check (pre-commit run --all-files):\n{result.stdout}"
     )
+    hook = subprocess.run(
+        ["just", "--justfile", str(JUSTFILE), "--show", "pre-commit-check"],
+        capture_output=True,
+        text=True,
+        timeout=20,
+    )
+    assert hook.returncode == 0, hook.stderr
+    assert "pre-commit run --all-files" in hook.stdout, hook.stdout
 
 
 @pytest.mark.skipif(not _have_make(), reason="`make` not on PATH")
 def test_ci_calls_openapi_export_before_frontend_build() -> None:
     """`make ci` must call openapi-export before frontend-build."""
     result = subprocess.run(
-        ["make", "-C", str(REPO_ROOT), "AI=", "-n", "ci"],
+        ["just", "--justfile", str(JUSTFILE), "--show", "ci"],
         capture_output=True,
         text=True,
         timeout=20,
     )
-    assert result.returncode == 0, f"`make -n ci` failed (rc={result.returncode}):\n{result.stderr}"
+    assert result.returncode == 0, f"`just --show ci` failed (rc={result.returncode}):\n{result.stderr}"
     out = result.stdout
-    assert "openapi" in out.lower(), f"`make ci` does not call openapi-export:\n{out}"
-    assert "frontend" in out.lower(), f"`make ci` does not call frontend-build:\n{out}"
-    openapi_pos = out.lower().find("openapi")
-    frontend_build_pos = out.lower().find("building frontend")
-    if frontend_build_pos == -1:
-        frontend_build_pos = out.lower().find("frontend-build")
-    assert openapi_pos < frontend_build_pos, (
-        f"openapi-export must appear before frontend-build in `make ci` output:\n{out}"
+    assert "openapi-export" in out, f"ci does not call openapi-export: {out}"
+    build = subprocess.run(
+        ["just", "--justfile", str(JUSTFILE), "--show", "build"],
+        capture_output=True,
+        text=True,
+        timeout=20,
+    )
+    assert build.returncode == 0, build.stderr
+    assert "frontend-build" in build.stdout, f"build must run frontend-build: {build.stdout}"
+    commands = [line.strip().split() for line in out.splitlines() if "just --quiet" in line]
+    steps = [step for command in commands for step in command[2:]]
+    assert steps.index("openapi-export") < steps.index("build"), (
+        f"openapi-export must run before build invokes frontend-build: {out}"
     )
 
 
@@ -255,31 +273,18 @@ def test_ci_runs_frontend_install_before_pre_commit_check() -> None:
     Running frontend-install first ensures node_modules is populated
     before pre-commit-check fires the hooks.
     """
-    # Read the Makefile directly to check the ci target's dependency order.
-    # `make -n ci` expands all dependencies recursively, but the ordering
-    # we care about is at the ci target level, which is most clearly
-    # verified by reading the target line.
-    makefile_text = MAKEFILE.read_text()
-    # Find the ci target line
-    ci_line = ""
-    for line in makefile_text.splitlines():
-        if line.startswith("ci:"):
-            ci_line = line
-            break
-    assert ci_line, "ci: target not found in Makefile"
-    # Both dependencies must appear on the ci target line
-    assert "frontend-install" in ci_line, (
-        f"frontend-install missing from `ci:` target dependencies: {ci_line!r}"
+    result = subprocess.run(
+        ["just", "--justfile", str(JUSTFILE), "--show", "ci"],
+        capture_output=True,
+        text=True,
+        timeout=20,
     )
-    assert "pre-commit-check" in ci_line, (
-        f"pre-commit-check missing from `ci:` target dependencies: {ci_line!r}"
-    )
-    # frontend-install must appear before pre-commit-check
-    fi_pos = ci_line.index("frontend-install")
-    pc_pos = ci_line.index("pre-commit-check")
-    assert fi_pos < pc_pos, (
-        f"frontend-install must appear before pre-commit-check in ci: target "
-        f"so node_modules exists when pre-commit hooks fire; got: {ci_line!r}"
+    assert result.returncode == 0, result.stderr
+    out = result.stdout
+    assert "frontend-install" in out, f"frontend-install missing from ci: {out}"
+    assert "pre-commit-check" in out, f"pre-commit-check missing from ci: {out}"
+    assert out.index("frontend-install") < out.index("pre-commit-check"), (
+        f"frontend-install must run before pre-commit-check: {out}"
     )
 
 
@@ -300,7 +305,7 @@ def test_makefile_mise_download_pins_version() -> None:
     """
     import re
 
-    text = MAKEFILE.read_text()
+    text = JUSTFILE.read_text()
     # Strip comment-only lines for the floating-URL check; executable
     # recipe lines must not use the mise.run shortlink.
     code_lines = "\n".join(line for line in text.splitlines() if not line.lstrip().startswith("#"))

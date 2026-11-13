@@ -26,6 +26,7 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 # environment ".venv-container".
 PROJECT_VENV = REPO_ROOT / (os.environ.get("UV_PROJECT_ENVIRONMENT") or ".venv")
 MAKEFILE = REPO_ROOT / "Makefile"
+JUSTFILE = REPO_ROOT / "justfile"
 
 
 def _have_make() -> bool:
@@ -39,29 +40,32 @@ def _have_make() -> bool:
 
 @pytest.mark.skipif(not _have_make(), reason="`make` not on PATH")
 def test_makefile_setup_invokes_uv_sync() -> None:
-    """`make -n setup` must include a `uv sync` invocation."""
+    """`just --show setup` must include a `uv sync` invocation."""
     result = subprocess.run(
-        ["make", "-C", str(REPO_ROOT), "AI=", "-n", "setup"],
+        ["just", "--justfile", str(JUSTFILE), "--show", "setup"],
         capture_output=True,
         text=True,
         timeout=20,
     )
-    assert result.returncode == 0, f"`make -n setup` failed:\n{result.stderr}"
-    assert "uv sync" in result.stdout, f"`make -n setup` missing `uv sync`:\n{result.stdout}"
+    assert result.returncode == 0, f"`just --show setup` failed:\n{result.stderr}"
+    assert "uv sync" in result.stdout, f"`just --show setup` missing `uv sync`:\n{result.stdout}"
 
 
 @pytest.mark.skipif(not _have_make(), reason="`make` not on PATH")
 def test_makefile_setup_invokes_pre_commit_install() -> None:
-    """`make -n setup` must install pre-commit hooks."""
+    """`just --show setup` must install pre-commit hooks."""
+    assert "install-hooks" in subprocess.check_output(
+        ["just", "--justfile", str(JUSTFILE), "--show", "setup"], text=True
+    )
     result = subprocess.run(
-        ["make", "-C", str(REPO_ROOT), "AI=", "-n", "setup"],
+        ["just", "--justfile", str(JUSTFILE), "--show", "install-hooks"],
         capture_output=True,
         text=True,
         timeout=20,
     )
-    assert result.returncode == 0, f"`make -n setup` failed:\n{result.stderr}"
+    assert result.returncode == 0, f"`just --show setup` failed:\n{result.stderr}"
     assert "pre-commit install" in result.stdout, (
-        f"`make -n setup` missing `pre-commit install`:\n{result.stdout}"
+        f"`just --show setup` missing `pre-commit install`:\n{result.stdout}"
     )
 
 
@@ -72,44 +76,44 @@ def test_makefile_setup_invokes_pre_commit_install() -> None:
 
 @pytest.mark.skipif(not _have_make(), reason="`make` not on PATH")
 def test_makefile_lint_includes_ruff() -> None:
-    """`make -n lint` must invoke ruff."""
+    """`just --show lint` must invoke ruff."""
     result = subprocess.run(
-        ["make", "-C", str(REPO_ROOT), "AI=", "-n", "lint"],
+        ["just", "--justfile", str(JUSTFILE), "--show", "lint"],
         capture_output=True,
         text=True,
         timeout=20,
     )
-    assert result.returncode == 0, f"`make -n lint` failed:\n{result.stderr}"
-    assert "ruff" in result.stdout, f"`make -n lint` missing ruff:\n{result.stdout}"
+    assert result.returncode == 0, f"`just --show lint` failed:\n{result.stderr}"
+    assert "ruff" in result.stdout, f"`just --show lint` missing ruff:\n{result.stdout}"
 
 
 @pytest.mark.skipif(not _have_make(), reason="`make` not on PATH")
 def test_makefile_lint_includes_eslint() -> None:
-    """`make -n lint` must invoke eslint (via npm run lint or direct call)."""
+    """`just --show frontend-lint` must invoke eslint (via npm run lint or direct call)."""
     result = subprocess.run(
-        ["make", "-C", str(REPO_ROOT), "AI=", "-n", "lint"],
+        ["just", "--justfile", str(JUSTFILE), "--show", "frontend-lint"],
         capture_output=True,
         text=True,
         timeout=20,
     )
-    assert result.returncode == 0, f"`make -n lint` failed:\n{result.stderr}"
+    assert result.returncode == 0, f"`just --show lint` failed:\n{result.stderr}"
     assert "eslint" in result.stdout.lower() or "npm" in result.stdout, (
-        f"`make -n lint` missing eslint / npm invocation:\n{result.stdout}"
+        f"`just --show lint` missing eslint / npm invocation:\n{result.stdout}"
     )
 
 
 @pytest.mark.skipif(not _have_make(), reason="`make` not on PATH")
 def test_makefile_lint_includes_tsc_no_emit() -> None:
-    """`make -n lint` must invoke tsc (typecheck / --noEmit)."""
+    """`just --show frontend-typecheck` must invoke tsc (typecheck / --noEmit)."""
     result = subprocess.run(
-        ["make", "-C", str(REPO_ROOT), "AI=", "-n", "lint"],
+        ["just", "--justfile", str(JUSTFILE), "--show", "frontend-typecheck"],
         capture_output=True,
         text=True,
         timeout=20,
     )
-    assert result.returncode == 0, f"`make -n lint` failed:\n{result.stderr}"
+    assert result.returncode == 0, f"`just --show lint` failed:\n{result.stderr}"
     assert "tsc" in result.stdout or "typecheck" in result.stdout or "type-check" in result.stdout, (
-        f"`make -n lint` missing tsc / typecheck invocation:\n{result.stdout}"
+        f"`just --show lint` missing tsc / typecheck invocation:\n{result.stdout}"
     )
 
 
@@ -223,7 +227,7 @@ def test_upgrade_deps_local_declared_phony() -> None:
 def test_upgrade_deps_local_recipe_writes_pd_dev_local_marker() -> None:
     """The upgrade-deps-local recipe must contain a command that writes
     the .pdomain-dev-local marker file."""
-    text = MAKEFILE.read_text()
+    text = JUSTFILE.read_text()
     assert ".pdomain-dev-local" in text, (
         "Makefile upgrade-deps-local recipe must write the .pdomain-dev-local marker"
     )

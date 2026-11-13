@@ -24,6 +24,7 @@ import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 MAKEFILE = REPO_ROOT / "Makefile"
+JUSTFILE = REPO_ROOT / "justfile"
 DOCKERFILE = REPO_ROOT / "Dockerfile"
 
 
@@ -35,7 +36,7 @@ def _make_dry_run(target: str) -> subprocess.CompletedProcess[str]:
     # Pass AI= to bypass the log-wrapper (AI ?= 1 is the Makefile default)
     # so the rendered recipe appears on stdout rather than .ci-ai.log.
     return subprocess.run(
-        ["make", "-C", str(REPO_ROOT), "AI=", "-n", target],
+        ["just", "--justfile", str(JUSTFILE), "--show", target],
         capture_output=True,
         text=True,
         timeout=30,
@@ -50,14 +51,14 @@ def _make_dry_run(target: str) -> subprocess.CompletedProcess[str]:
 @pytest.mark.skipif(not _have_make(), reason="`make` not on PATH")
 @pytest.mark.parametrize("target", ["docker-build", "docker-run", "docker-shell"])
 def test_docker_target_dry_runs_cleanly(target: str) -> None:
-    """`make -n <target>` must parse + render without error.
+    """`just --show <target>` must parse + render without error.
 
     A typo in the recipe (or a missing dependency target) would surface
     here without needing docker installed — the dry-run only resolves
     variables and prints the recipe."""
     result = _make_dry_run(target)
     assert result.returncode == 0, (
-        f"`make -n {target}` failed (rc={result.returncode}):\n"
+        f"`just --show {target}` failed (rc={result.returncode}):\n"
         f"stdout:\n{result.stdout}\nstderr:\n{result.stderr}"
     )
 
@@ -93,9 +94,9 @@ def test_docker_targets_use_default_image_tag(target: str) -> None:
     """
     result = _make_dry_run(target)
     assert result.returncode == 0
-    assert "pdomain-ocr-labeler-spa:dev" in result.stdout, (
-        f"`make -n {target}` did not reference default tag pdomain-ocr-labeler-spa:dev:\n{result.stdout}"
-    )
+    assert "pdomain-ocr-labeler-spa:dev" in result.stdout or (
+        "${DOCKER_IMAGE:-pdomain-ocr-labeler-spa}" in result.stdout and "${DOCKER_TAG:-dev}" in result.stdout
+    ), f"`just --show {target}` did not reference default tag pdomain-ocr-labeler-spa:dev:\n{result.stdout}"
 
 
 # ---------------------------------------------------------------------------
@@ -143,7 +144,7 @@ def test_docker_run_maps_settings_port_into_container() -> None:
     # Container side may be a literal int or a make-var expansion that
     # already got resolved by `-n`.
     matches = re.findall(r"-p\s+\S+:(\d+)\b", result.stdout)
-    assert matches, f"`make -n docker-run` rendered no `-p HOST:CONTAINER` flag:\n{result.stdout}"
+    assert matches, f"`just --show docker-run` rendered no `-p HOST:CONTAINER` flag:\n{result.stdout}"
     for container_port in matches:
         assert int(container_port) == expected, (
             f"`make docker-run` -p flag's container-side port {container_port} "
@@ -172,8 +173,8 @@ def test_makefile_defines_docker_macro() -> None:
     the contributor experience matches `make frontend-build` without
     npm.
     """
-    text = MAKEFILE.read_text()
-    assert "define _docker" in text, "Makefile must define a `_docker` macro (B-24)"
+    text = JUSTFILE.read_text()
+    assert "_docker +args:" in text, "Makefile must define a `_docker` macro (B-24)"
     # The macro must include the command-presence check.
     assert "command -v docker" in text, (
         "`_docker` macro must check for docker on PATH via `command -v docker`"
@@ -189,7 +190,7 @@ def test_docker_targets_invoke_docker_macro(target: str) -> None:
     formatting variation but tight enough to catch a regression
     where someone copies a recipe and forgets the macro.
     """
-    text = MAKEFILE.read_text()
+    text = JUSTFILE.read_text()
     # Locate the recipe block for `target`. Each docker target is a
     # single-recipe line in the current Makefile, so we just slice
     # between the target line and the next blank line.
@@ -203,7 +204,7 @@ def test_docker_targets_invoke_docker_macro(target: str) -> None:
     # non-tab non-blank line.
     recipe: list[str] = []
     for ln in lines[target_line + 1 :]:
-        if ln.startswith("\t"):
+        if ln.startswith("    "):
             recipe.append(ln)
         elif ln.strip() == "":
             continue

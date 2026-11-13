@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import json
 import re
+import subprocess
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -23,7 +24,7 @@ PACKAGE_JSON = FRONTEND / "package.json"
 TSCONFIG_APP = FRONTEND / "tsconfig.app.json"
 TSCONFIG_TEST = FRONTEND / "tsconfig.test.json"
 VITEST_CONFIG = FRONTEND / "vitest.config.ts"
-MAKEFILE = REPO_ROOT / "Makefile"
+JUSTFILE = REPO_ROOT / "justfile"
 
 # Canonical openapi-typescript output path, repeated by Makefile +
 # package.json + spec. Source of truth: ``docs/architecture/01-data-models.md:712``
@@ -91,7 +92,14 @@ def test_openapi_gen_path_is_consistent_across_makefile_and_package_json() -> No
         f"package.json openapi:gen must emit to {EXPECTED_TS_TYPES!r}; got: {openapi_script!r}"
     )
 
-    makefile_text = MAKEFILE.read_text(encoding="utf-8")
+    result = subprocess.run(
+        ["just", "--justfile", str(JUSTFILE), "--show", "openapi-export"],
+        capture_output=True,
+        text=True,
+        timeout=20,
+    )
+    assert result.returncode == 0, result.stderr
+    makefile_text = result.stdout
     # Makefile writes the schema to frontend/openapi.json and runs
     # openapi-typescript with the same EXPECTED_TS_TYPES output.
     assert "frontend/openapi.json" in makefile_text, (
