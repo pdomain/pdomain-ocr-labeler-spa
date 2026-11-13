@@ -93,9 +93,10 @@ implementation decisions before they can be treated as locked behavior.
 - ToolbarActionGrid is hidden in `ProjectPage`, and its handler mainly
   invalidates the page. Decide whether to capture current stub behavior or the
   intended real action mapping.
-- WordEditDialog renders many mutation controls, but visible `ProjectPage`
-  passes limited callbacks. Decide whether dialog mutations are active product
-  behavior or superseded by right-panel editing.
+- **Resolved 2026-11-12:** word edits are the mounted right-panel editor
+  (`word-detail` inside `right-panel`). `WordEditDialog` is not mounted, and
+  character-range mutations are not a current write. See
+  `docs/specs/behavior/component-dialogs-actions.md`.
 - Auto-save `SaveStatus` and `image_drift` recovery are documented, but active
   frontend state wiring was not found.
 - Rotation handler job plumbing exists, but real image rotation/OCR/save effects

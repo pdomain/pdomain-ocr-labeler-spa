@@ -1041,6 +1041,49 @@ def test_rotate_undo_restores_the_source_image(tmp_path: Path, seeded_project: P
 
 
 @pytest.mark.integration
+def test_reocr_beside_a_rotation_leaves_the_source_image_in_place(
+    tmp_path: Path, seeded_project: Path
+) -> None:
+    """A re-OCR step after a rotation moves the page text and leaves the file bytes put."""
+    from pdomain_ocr_labeler_spa.core.page_lineage import retag_boundary_op
+
+    image = seeded_project / "001.png"
+    rotated = _replace_page(seeded_project, "dog", image_bytes=b"rotated-ocr-image")
+    store = LabelerPageStore(project_dir=seeded_project)
+    try:
+        aggregate = store.get_page(rotated)
+        assert retag_boundary_op(aggregate, "rotate") is True
+        store.save_page(aggregate)
+    finally:
+        store.close()
+
+    reocr = _replace_page(seeded_project, "fox")
+    kept = b"scan-after-reocr"
+    image.write_bytes(kept)
+
+    client = _loaded_client(tmp_path, seeded_project)
+    try:
+        current = client.get("/api/projects/book1/pages/0")
+        assert current.status_code == 200, current.text
+        assert "fox" in current.json()["page_text_gt"]
+
+        stepped = client.post("/api/projects/book1/pages/0/undo")
+        assert stepped.status_code == 200, stepped.text
+        assert "dog" in stepped.json()["page_text_gt"]
+        assert "fox" not in stepped.json()["page_text_gt"]
+        assert image.read_bytes() == kept
+        assert _slot_id(seeded_project) == rotated
+
+        forwarded = client.post("/api/projects/book1/pages/0/redo")
+        assert forwarded.status_code == 200, forwarded.text
+        assert "fox" in forwarded.json()["page_text_gt"]
+        assert image.read_bytes() == kept
+        assert _slot_id(seeded_project) == reocr
+    finally:
+        client.close()
+
+
+@pytest.mark.integration
 def test_reocr_undo_leaves_the_source_image_in_place(tmp_path: Path, seeded_project: Path) -> None:
     """A re-OCR cross restores page JSON and does not rewrite the source image."""
     image = seeded_project / "001.png"

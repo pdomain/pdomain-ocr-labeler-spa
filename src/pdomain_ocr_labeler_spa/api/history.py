@@ -140,6 +140,21 @@ def _boundary_op(aggregate: PageAggregate) -> str | None:
     return lineage.boundary_op
 
 
+def _crossing_restores_image(op: HistoryOp, current_agg: PageAggregate, target_agg: PageAggregate) -> bool:
+    """Restore the source image only for the rotation boundary this step crosses.
+
+    Undo leaves the current aggregate, so that aggregate's ``boundary_op``
+    decides. Redo enters the target, so the target's ``boundary_op`` decides.
+    A re-OCR step does not rewrite the file, even when its neighbor was born
+    from a rotation.
+    """
+    if op == "undo":
+        return _boundary_op(current_agg) == "rotate"
+    if op == "redo":
+        return _boundary_op(target_agg) == "rotate"
+    return False
+
+
 def _generation_image_hash(graph: ProvenanceGraph | None) -> str | None:
     """Return the OCR image hash for one aggregate.
 
@@ -277,7 +292,7 @@ def _restore_lineage_step(
     if isinstance(loaded, JSONResponse):
         return loaded
     restored_page, restored_sidecars = loaded
-    rotate_cross = _boundary_op(current_agg) == "rotate" or _boundary_op(target_agg) == "rotate"
+    rotate_cross = _crossing_restores_image(op, current_agg, target_agg)
     image_hash = _generation_image_hash(target_graph) if rotate_cross else None
 
     def _save_slot() -> None:

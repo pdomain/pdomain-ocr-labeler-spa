@@ -46,11 +46,13 @@ replacement while the slot sits on the older aggregate points `superseded_by` at
 that aggregate's own `previous_page_id`. The Reload OCR confirm says undo will step back across the reload, and
 the undo control stays enabled on that fresh aggregate.
 
-A rotate undo or redo writes the target aggregate's OCR image blob back onto the source image path, then moves
-the slot. An edit after OCR leaves that image ref on the ingest node, not on the head. If the slot save fails,
-the previous file bytes are put back. A re-OCR cross does not touch that file. The content blob is read first,
-so a missing blob leaves the slot where it was. The image URL stays the display-width query. `GET` of the image
-still sends `Cache-Control: public, max-age=3600`, so a browser can keep the previous image until that hour ends.
+Undo restores the source image only when the aggregate being left is tagged `rotate`. Redo restores it only when
+the aggregate being entered is tagged `rotate`. The bytes written are that target aggregate's OCR image blob.
+An edit after OCR leaves that image ref on the ingest node, not on the head. If the slot save fails, the previous
+file bytes are put back. A re-OCR step does not rewrite the file, even when the neighbor aggregate was born from
+a rotation. The content blob is read first, so a missing blob leaves the slot where it was. The image URL stays
+the display-width query. `GET` of the image still sends `Cache-Control: public, max-age=3600`, so a browser can
+keep the previous image until that hour ends.
 
 `POST /api/projects/{project_id}/maintenance/prune` unlinks only the blob names the
 [undo spec](../specs/2026-06-12-event-store-undo.md) marks dead in the snapshot taken before the walk. A file
