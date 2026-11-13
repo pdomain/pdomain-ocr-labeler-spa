@@ -338,6 +338,7 @@ export function CharFixerSection({ word, projectId, pageIndex, imageUrl }: CharF
             {selectedText}
           </span>
           <CoordInput
+            key={`${wordKey}-x1`}
             label="x1"
             value={selected.bbox.x}
             testId="charfixer-detail-x1"
@@ -346,6 +347,7 @@ export function CharFixerSection({ word, projectId, pageIndex, imageUrl }: CharF
             }}
           />
           <CoordInput
+            key={`${wordKey}-y1`}
             label="y1"
             value={selected.bbox.y}
             testId="charfixer-detail-y1"
@@ -354,6 +356,7 @@ export function CharFixerSection({ word, projectId, pageIndex, imageUrl }: CharF
             }}
           />
           <CoordInput
+            key={`${wordKey}-x2`}
             label="x2"
             value={selected.bbox.x + selected.bbox.width}
             testId="charfixer-detail-x2"
@@ -362,6 +365,7 @@ export function CharFixerSection({ word, projectId, pageIndex, imageUrl }: CharF
             }}
           />
           <CoordInput
+            key={`${wordKey}-y2`}
             label="y2"
             value={selected.bbox.y + selected.bbox.height}
             testId="charfixer-detail-y2"

@@ -304,6 +304,37 @@ describe("CharFixerSection — P4.b bbox canvas + handles (Gap 39)", () => {
     expect(screen.getByTestId<HTMLInputElement>("charfixer-detail-x1").value).toBe("3");
   });
 
+  it("shows the new word's coordinate when the word changes under a focused field", async () => {
+    const user = userEvent.setup();
+    const wordA = makeWord("ab", "ab");
+    const wordB: WordMatch = {
+      ...makeWord("cd", "cd"),
+      line_index: 1,
+      word_index: 2,
+      bbox: { x: 40, y: 8, width: 20, height: 12 },
+    };
+    const { rerender, qc } = renderSection(wordA);
+
+    const x1 = screen.getByTestId("charfixer-detail-x1");
+    await user.click(x1);
+    await user.clear(x1);
+    await user.type(x1, "9");
+    expect(screen.getByTestId<HTMLInputElement>("charfixer-detail-x1").value).toBe("9");
+    expect(screen.getByTestId("charfixer-detail-x1")).toHaveFocus();
+
+    rerender(
+      <QueryClientProvider client={qc}>
+        <CharFixerSection word={wordB} projectId="p1" pageIndex={0} />
+      </QueryClientProvider>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId<HTMLInputElement>("charfixer-detail-x1").value).toBe("40");
+    });
+    await user.keyboard("1");
+    expect(screen.getByTestId<HTMLInputElement>("charfixer-detail-x1").value).toBe("40");
+  });
+
   it("dragging a handle marks the bbox dirty (enables Apply)", () => {
     renderSection(makeWord("ab", "ab"));
     expect(screen.getByTestId<HTMLButtonElement>("charfixer-apply").disabled).toBe(true);

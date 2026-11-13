@@ -305,9 +305,17 @@ export function BBoxSection({ word, projectId, pageIndex, refineTracking }: BBox
     );
   }
 
+  function isIncompleteCoordinate(value: string): boolean {
+    return value.trim() === "" || value === "-" || value === "." || value === "-.";
+  }
+
   function handleChange(field: BBoxField, value: string) {
+    // A word change clears focus state while the same input can stay focused.
+    // Claim the field again on the next edit so the raw text, not the draft
+    // number, is what the user sees while they type.
+    setFocusedField(field);
     setFocusedRaw(value);
-    if (value.trim() === "" || value === "-" || value === "." || value === "-.") return;
+    if (isIncompleteCoordinate(value)) return;
     const num = Number(value);
     if (!Number.isFinite(num)) return;
     setDraft((prev) => ({ ...prev, [field]: num }));
@@ -334,6 +342,9 @@ export function BBoxSection({ word, projectId, pageIndex, refineTracking }: BBox
   function handleBlur(field: BBoxField, value: string) {
     setFocusedField((current) => (current === field ? null : current));
     setFocusedRaw(null);
+    // Number("") is 0, which would post a cleared field as a real coordinate.
+    // Leave the draft alone so the input redisplays the last committed number.
+    if (isIncompleteCoordinate(value)) return;
     const num = Number(value);
     if (!Number.isFinite(num)) return;
     const updated: BBox = { ...draft, [field]: num };

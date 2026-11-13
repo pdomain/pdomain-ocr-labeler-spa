@@ -285,6 +285,46 @@ describe("BBoxSection (Slice 16 + P3.a)", () => {
     await waitFor(() => expect(handler).toHaveBeenCalledOnce());
   });
 
+  it("does not post a cleared coordinate as 0", async () => {
+    const handler = vi.fn(() => Promise.resolve(HttpResponse.json(makePageResponse(DEFAULT_BBOX))));
+    server.use(http.post("/api/projects/p1/pages/0/words/0/0/rebox", handler));
+
+    const user = userEvent.setup();
+    renderBBox();
+
+    const xInput = screen.getByTestId("bbox-input-x");
+    await user.click(xInput);
+    await user.clear(xInput);
+    await user.tab();
+
+    expect(screen.getByTestId<HTMLInputElement>("bbox-input-x").value).toBe("10");
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(handler).not.toHaveBeenCalled();
+  });
+
+  it("posts an explicit 0 when the user types it", async () => {
+    let capturedX: number | undefined;
+    server.use(
+      http.post("/api/projects/p1/pages/0/words/0/0/rebox", async ({ request }) => {
+        const body = (await request.json()) as { bbox: BBox };
+        capturedX = body.bbox.x;
+        return HttpResponse.json(makePageResponse(body.bbox));
+      }),
+    );
+
+    const user = userEvent.setup();
+    renderBBox();
+
+    const xInput = screen.getByTestId("bbox-input-x");
+    await user.click(xInput);
+    await user.clear(xInput);
+    await user.type(xInput, "0");
+    await user.tab();
+
+    await waitFor(() => expect(capturedX).toBe(0));
+    expect(screen.getByTestId<HTMLInputElement>("bbox-input-x").value).toBe("0");
+  });
+
   it("Reset button shows original bbox values by resetting draft state", async () => {
     server.use(
       http.post("/api/projects/p1/pages/0/words/0/0/rebox", async ({ request }) => {
@@ -694,6 +734,44 @@ describe("BBoxSection (Slice 16 + P3.a)", () => {
     expect(screen.getByTestId<HTMLInputElement>("bbox-input-y").value).toBe("61");
     expect(screen.getByTestId<HTMLInputElement>("bbox-input-w").value).toBe("71");
     expect(screen.getByTestId<HTMLInputElement>("bbox-input-h").value).toBe("81");
+  });
+
+  it("keeps a later edit as typed text after the selected word changes under a focused field", async () => {
+    const WORD_A = makeWord(DEFAULT_BBOX);
+    const WORD_B: WordMatch = {
+      ...makeWord({ x: 50, y: 60, width: 70, height: 80 }),
+      line_index: 1,
+      word_index: 1,
+    };
+    const tracking = createFakeRefineTracking();
+    const qc = makeQueryClient();
+
+    function Harness({ word }: { word: WordMatch }) {
+      const refineTracking = tracking.useTracking();
+      return (
+        <BBoxSection word={word} projectId="p1" pageIndex={0} refineTracking={refineTracking} />
+      );
+    }
+
+    const user = userEvent.setup();
+    const { rerender } = render(
+      <QueryClientProvider client={qc}>
+        <Harness word={WORD_A} />
+      </QueryClientProvider>,
+    );
+
+    await user.click(screen.getByTestId("bbox-input-x"));
+    rerender(
+      <QueryClientProvider client={qc}>
+        <Harness word={WORD_B} />
+      </QueryClientProvider>,
+    );
+    expect(screen.getByTestId("bbox-input-x")).toHaveFocus();
+
+    const xInput = screen.getByTestId("bbox-input-x");
+    await user.clear(xInput);
+    await user.type(xInput, "777");
+    expect(screen.getByTestId<HTMLInputElement>("bbox-input-x").value).toBe("777");
   });
 
   // ─── Review finding 2 (high): refine and expand_then_refine no-op when
