@@ -148,6 +148,7 @@ exclude = [
     "htmlcov",
     "test-results",
     "playwright-report",
+    "/tests/e2e/artifacts/*.png",
     "/frontend/coverage",
     "/frontend/dist",
     "/frontend/openapi.json",
