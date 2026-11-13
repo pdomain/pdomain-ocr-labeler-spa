@@ -15,7 +15,7 @@ last_verified: 2026-11-06
 How `pdomain-ocr-labeler-spa` is built, packaged, distributed, and developed.
 
 > Cross-refs:
-> Architecture template — `pdomain-prep-for-pgdp/` (Makefile, install.sh, Dockerfile)
+> Architecture template — `pdomain-prep-for-pgdp/` (justfile, install.sh, Dockerfile)
 > CI gates — [`14-testing.md`](14-testing.md) §7
 > Drift checks — [`01-data-models.md`](01-data-models.md) §6
 
@@ -503,6 +503,10 @@ just release-patch   # manual release; also release-minor and release-major
 ---
 
 ## 15. Dev-local mode + safe `upgrade-deps` (deferred)
+
+**Historical proposal (2026-05-07).** This section preserves the Make-era proposal. Its Make commands
+and deferred milestone labels describe that proposal. Current operation uses the repository
+[`justfile`](../../justfile) and [local-dev runbook](../runbooks/local-dev.md).
 
 **Status.** Deferred until the `Makefile` lands
 (see [`16-milestones.md`](../../specs/16-milestones.md) M0). Captured here so the

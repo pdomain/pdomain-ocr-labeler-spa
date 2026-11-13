@@ -155,7 +155,7 @@ Redo is symmetric.
   invalidation refreshes button state with no extra round-trip.
 - `POST /api/projects/{project_id}/pages/{page_index}/undo` and `.../redo` — 409 (or
   conventional error shape) when unavailable; success returns the same shape the other
-  page mutations return and bumps the generation. Run `make openapi-export` after.
+  page mutations return and bumps the generation. Run `just openapi-export` after.
 
 ## Driver-contract testids
 
@@ -185,6 +185,12 @@ Redo is symmetric.
 - The retired 2026-06-12 parity sweep rows C20 and P7 — retained in Git history.
 
 ## Milestone plan
+
+**Historical implementation plan.** The milestone table and v1 slices below retain their original
+Make-era commands and unchecked boxes. The current-scope note above records what has shipped;
+these boxes are not a current task list. For current operation, use the repository
+[`justfile`](../../justfile) and [local-dev runbook](../runbooks/local-dev.md). U-M6 remains open
+as described above.
 
 | Milestone | Content | Status |
 |-----------|---------|--------|
