@@ -1,3 +1,4 @@
+import { describeOp } from "./describeEraseOp";
 // ErasePixelsSection.tsx — P3.c hi-fi rebuild (Gap 36).
 // Spec: docs/plans/hifi-gaps-plan.md Slice P3.c.
 //
@@ -28,7 +29,7 @@
 import { useState } from "react";
 import { Button } from "@pdomain/pdomain-ui/primitives";
 import { useRefineAvailable } from "../../../hooks/useRefineAvailable";
-import { EraseCanvas, describeOp, type EraseOp, type EraseTool } from "./EraseCanvas";
+import { EraseCanvas, type EraseOp, type EraseTool } from "./EraseCanvas";
 import type { components } from "../../../api/types";
 
 type BBox = components["schemas"]["BBox"];
@@ -147,11 +148,11 @@ export function ErasePixelsSection({
             >
               <span className="text-[11px] text-ink-2 truncate">{describeOp(op, i)}</span>
               <button
-                data-testid={`erase-op-${i}-remove`}
+                data-testid={`erase-op-${String(i)}-remove`}
                 onClick={() => {
                   handleRemoveOp(i);
                 }}
-                aria-label={`Remove op ${i + 1}`}
+                aria-label={`Remove op ${String(i + 1)}`}
                 className="text-ink-3 hover:text-status-mismatch text-sm px-1"
               >
                 ×

@@ -173,7 +173,7 @@ export function GlyphAnnotationPanel({
 
   return (
     <div
-      data-testid={`glyph-panel-${lineIndex}-${wordIndex}`}
+      data-testid={`glyph-panel-${String(lineIndex)}-${String(wordIndex)}`}
       className="flex flex-col gap-2 p-2 text-xs border border-border-1 rounded-sm"
     >
       {/* No internal heading here — WordDetail mounts this inside an
@@ -204,7 +204,9 @@ export function GlyphAnnotationPanel({
         <select
           data-testid="glyph-panel-ligature-kind-select"
           value={newKind}
-          onChange={(e) => setNewKind(e.target.value)}
+          onChange={(e) => {
+            setNewKind(e.target.value);
+          }}
           className="text-[10px] border border-border-1 rounded-sm px-1 mb-1 bg-surface-1"
         >
           {LIGATURE_KINDS.map(({ value, label }) => (
@@ -220,8 +222,10 @@ export function GlyphAnnotationPanel({
             {chars.map((ch, i) => (
               <button
                 key={i}
-                data-testid={`glyph-panel-charspan-cell-${i}`}
-                onClick={(e) => handleCharSpanClick(i, e.shiftKey)}
+                data-testid={`glyph-panel-charspan-cell-${String(i)}`}
+                onClick={(e) => {
+                  handleCharSpanClick(i, e.shiftKey);
+                }}
                 className={[
                   "w-5 h-5 text-[10px] font-mono border rounded-sm cursor-pointer",
                   selectedSpan !== null && i >= selectedSpan[0] && i < selectedSpan[1]
@@ -229,7 +233,7 @@ export function GlyphAnnotationPanel({
                     : "border-border-1 hover:bg-surface-2",
                 ].join(" ")}
                 type="button"
-                title={`char ${i}: ${ch}`}
+                title={`char ${String(i)}: ${ch}`}
               >
                 {ch}
               </button>
@@ -246,10 +250,12 @@ export function GlyphAnnotationPanel({
             <div key={idx} className="flex items-center gap-1 mt-0.5">
               <span className={isPredicted ? "text-ink-4" : "text-ink-1"}>
                 {isPredicted ? "◌" : "•"} {ligatureLabel(lig.kind)}
-                {lig.char_span ? ` [${lig.char_span[0]}-${lig.char_span[1]}]` : ""}
+                {lig.char_span ? ` [${String(lig.char_span[0])}-${String(lig.char_span[1])}]` : ""}
               </span>
               <button
-                onClick={() => handleRemoveLigature(idx)}
+                onClick={() => {
+                  handleRemoveLigature(idx);
+                }}
                 disabled={disabled}
                 className="text-[10px] text-red-500 hover:text-red-700 ml-auto disabled:opacity-40"
                 type="button"
@@ -276,7 +282,7 @@ export function GlyphAnnotationPanel({
             </button>
             <button
               data-testid={`glyph-panel-reject-prediction-${pred.kind}`}
-              onClick={() =>
+              onClick={() => {
                 onSetAnnotations(
                   annotations ?? {
                     ligatures: [],
@@ -284,8 +290,8 @@ export function GlyphAnnotationPanel({
                     swash: false,
                     source: "human",
                   },
-                )
-              }
+                );
+              }}
               disabled={disabled}
               className="text-[10px] text-red-500 hover:text-red-700 disabled:opacity-40"
               type="button"
@@ -304,8 +310,10 @@ export function GlyphAnnotationPanel({
             {chars.map((ch, i) => (
               <button
                 key={i}
-                data-testid={`glyph-panel-long-s-cell-${i}`}
-                onClick={() => handleToggleLongS(i)}
+                data-testid={`glyph-panel-long-s-cell-${String(i)}`}
+                onClick={() => {
+                  handleToggleLongS(i);
+                }}
                 disabled={disabled}
                 className={[
                   "w-5 h-5 text-[10px] font-mono border rounded-sm cursor-pointer disabled:opacity-40",
@@ -314,7 +322,7 @@ export function GlyphAnnotationPanel({
                     : "border-border-1 hover:bg-surface-2",
                 ].join(" ")}
                 type="button"
-                title={`char ${i}: ${ch}`}
+                title={`char ${String(i)}: ${ch}`}
               >
                 {ch}
               </button>
@@ -329,7 +337,9 @@ export function GlyphAnnotationPanel({
           data-testid="glyph-panel-swash-checkbox"
           type="checkbox"
           checked={annotations?.swash ?? false}
-          onChange={(e) => handleSwashChange(e.target.checked)}
+          onChange={(e) => {
+            handleSwashChange(e.target.checked);
+          }}
           disabled={disabled}
           className="cursor-pointer disabled:opacity-40"
         />

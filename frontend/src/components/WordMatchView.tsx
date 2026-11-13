@@ -1,3 +1,4 @@
+import { lineMatchesFilter } from "./../lib/lineMatchesFilter";
 // WordMatchView.tsx — virtualised list of LineCard rows for the word-match pane.
 //
 // Spec: docs/specs/2026-05-12-word-matches-design.md §Virtualisation
@@ -21,7 +22,6 @@ import { LineCard } from "./LineCard";
 import type { MatchFilter } from "../stores/ui-prefs";
 
 type LineMatch = components["schemas"]["LineMatch"];
-type WordMatch = components["schemas"]["WordMatch"];
 
 /**
  * Decide whether a line should render for the given filter mode.
@@ -32,12 +32,6 @@ type WordMatch = components["schemas"]["WordMatch"];
  *   - "unvalidated" → keep lines where `!is_fully_validated`
  *   - "mismatched"  → keep lines containing any non-exact word match
  */
-export function lineMatchesFilter(line: LineMatch, filter: MatchFilter): boolean {
-  if (filter === "all") return true;
-  if (filter === "unvalidated") return !line.is_fully_validated;
-  // "mismatched" — any word_match whose status != exact qualifies.
-  return line.word_matches.some((wm: WordMatch) => wm.match_status !== "exact");
-}
 
 export interface WordMatchViewProps {
   lines: LineMatch[];
@@ -101,6 +95,7 @@ export function WordMatchView({
   onEditWord,
   imageBaseUrl,
 }: WordMatchViewProps) {
+  "use no memo";
   const parentRef = useRef<HTMLDivElement>(null);
 
   // Spec 22 §8: filter lines before virtualisation so excluded rows
@@ -110,6 +105,9 @@ export function WordMatchView({
     [lines, filter],
   );
 
+  // react-hooks 7.1.1 emits this diagnostic before honoring the compiler opt-out.
+  // https://react.dev/reference/react-compiler/directives/use-no-memo
+  // eslint-disable-next-line react-hooks/incompatible-library -- the function stays outside compiler memoization
   const virtualizer = useVirtualizer({
     count: visibleLines.length,
     getScrollElement: () => parentRef.current,
@@ -166,7 +164,8 @@ export function WordMatchView({
       <div style={{ height: totalSize, width: "100%", position: "relative" }}>
         {items.map((virtualRow) => {
           // virtualRow.index is always within visibleLines bounds (virtualizer contract).
-          const line = visibleLines[virtualRow.index]!;
+          const line = visibleLines[virtualRow.index];
+          if (!line) return null;
           return (
             <div
               key={virtualRow.key}
@@ -177,7 +176,7 @@ export function WordMatchView({
                 top: 0,
                 left: 0,
                 width: "100%",
-                transform: `translateY(${virtualRow.start}px)`,
+                transform: `translateY(${String(virtualRow.start)}px)`,
               }}
             >
               <LineCard

@@ -1,3 +1,4 @@
+import { resolveWord } from "../../lib/resolveWord";
 // WordDetail.test.tsx — Tests for Slice 16 word detail accordion scaffold.
 // Covers: B-RIGHT-001, B-RIGHT-005, B-RIGHT-006, B-RIGHT-007, B-RIGHT-008, B-RIGHT-010, B-RIGHT-011, B-RIGHT-012, B-RIGHT-013
 // Spec: docs/specs/2026-05-15-hifi-redesign-plan.md Slice 16.
@@ -38,7 +39,7 @@ import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { http, HttpResponse } from "msw";
 import { server } from "../../test/server";
-import { WordDetail, resolveWord } from "./WordDetail";
+import { WordDetail } from "./WordDetail";
 import { clearSelection, selectWord } from "../../stores/selection-store";
 import { useBboxRefineTracking } from "../../hooks/useBboxRefineTracking";
 import type { UseBboxRefineTrackingResult } from "../../hooks/useBboxRefineTracking";

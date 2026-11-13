@@ -198,7 +198,7 @@ export function CharFixerCanvas({
 
   const handleHandleDragMove = useCallback(
     (rangeIndex: number, pos: HandlePos) => (e: Konva.KonvaEventObject<DragEvent>) => {
-      const stage = e.target.getStage?.();
+      const stage = e.target.getStage();
       if (!stage) return;
       const ptr = stage.getPointerPosition();
       if (!ptr) return;
@@ -241,7 +241,8 @@ export function CharFixerCanvas({
         <Layer>
           {charBboxes.map((cb, i) => {
             // i % rangePalette.length is always in-bounds — non-null safe.
-            const palette = rangePalette[i % rangePalette.length]!;
+            const palette = rangePalette[i % rangePalette.length];
+            if (!palette) return null;
             const tl = toCanvas(cb.bbox.x, cb.bbox.y);
             const br = toCanvas(cb.bbox.x + cb.bbox.width, cb.bbox.y + cb.bbox.height);
             const overlayX = Math.min(tl.x, br.x);
@@ -251,8 +252,8 @@ export function CharFixerCanvas({
             const isSelected = selectedIndex === i;
             return (
               <Rect
-                key={`rect-${i}`}
-                data-testid={`charfixer-range-${i}`}
+                key={`rect-${String(i)}`}
+                data-testid={`charfixer-range-${String(i)}`}
                 x={overlayX}
                 y={overlayY}
                 width={overlayW}
@@ -277,13 +278,14 @@ export function CharFixerCanvas({
             charBboxes[selectedIndex] &&
             HANDLES.map((h) => {
               // charBboxes[selectedIndex] is truthy (checked above in && chain).
-              const cb = charBboxes[selectedIndex]!;
+              const cb = charBboxes[selectedIndex];
+              if (!cb) return null;
               const c = h.centre(cb.bbox);
               const can = toCanvas(c.x, c.y);
               return (
                 <Rect
-                  key={`handle-${selectedIndex}-${h.pos}`}
-                  data-testid={`charfixer-range-${selectedIndex}-handle-${h.pos}`}
+                  key={`handle-${String(selectedIndex)}-${h.pos}`}
+                  data-testid={`charfixer-range-${String(selectedIndex)}-handle-${h.pos}`}
                   x={can.x - HANDLE_SIZE / 2}
                   y={can.y - HANDLE_SIZE / 2}
                   width={HANDLE_SIZE}
@@ -308,22 +310,3 @@ export function CharFixerCanvas({
  * passes in the character bbox start/end pairs; this helper just computes a
  * sensible default bbox to display until the user moves a handle.
  */
-export function initialCharBboxes(
-  wordBbox: BBox,
-  ranges: readonly { start: number; end: number }[],
-  totalChars: number,
-): CharacterBBox[] {
-  if (totalChars <= 0 || ranges.length === 0) return [];
-  const charW = wordBbox.width / totalChars;
-  return ranges.map((r) => {
-    const startIdx = Math.max(0, Math.min(totalChars - 1, r.start));
-    const endIdx = Math.max(startIdx, Math.min(totalChars - 1, r.end));
-    const x = wordBbox.x + charW * startIdx;
-    const width = Math.max(1, charW * (endIdx - startIdx + 1));
-    return {
-      start: r.start,
-      end: r.end,
-      bbox: { x, y: wordBbox.y, width, height: wordBbox.height },
-    };
-  });
-}

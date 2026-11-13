@@ -24,7 +24,7 @@ export type LineMatch = components["schemas"]["LineMatch"];
  *   - "mismatched"  → only lines containing any non-exact word match
  *   - "all"         → no filtering
  */
-function hasUnvalidatedWord(line: LineMatch): boolean {
+function hasUnvalidatedWord(line: Partial<LineMatch>): boolean {
   const words = line.word_matches ?? [];
   // Word data is authoritative in BOTH directions when present. If we have
   // words, derive the answer directly from their validation state — this stays
@@ -32,7 +32,7 @@ function hasUnvalidatedWord(line: LineMatch): boolean {
   if (words.length > 0) return words.some((w) => !w.is_validated);
   // No word data: fall back to the line-level flag (explicit signal), then the
   // validated/total counts.
-  if (line.is_fully_validated !== undefined && line.is_fully_validated !== null) {
+  if (typeof line.is_fully_validated === "boolean") {
     return !line.is_fully_validated;
   }
   if (line.total_word_count !== undefined && line.validated_word_count !== undefined) {

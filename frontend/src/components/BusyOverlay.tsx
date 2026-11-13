@@ -1,3 +1,4 @@
+import { optionalString, readField } from "../lib/runtimeValues";
 // BusyOverlay.tsx — full-page busy overlay shown during active mutations or jobs.
 // ProjectLoadingOverlay — higher z-index overlay specifically for project load.
 //
@@ -69,7 +70,7 @@ export function BusyOverlay({ activeJob, isMutating = false, onCancel }: BusyOve
     jobType != null && (CANCELLABLE.has(jobType) || BEST_EFFORT_CANCEL.has(jobType));
   const isBestEffort = jobType != null && BEST_EFFORT_CANCEL.has(jobType);
 
-  const message = activeJob?.progress?.message ?? "Working…";
+  const message = optionalString(readField(activeJob?.progress, "message")) ?? "Working…";
 
   function handleCancel() {
     if (onCancel) {

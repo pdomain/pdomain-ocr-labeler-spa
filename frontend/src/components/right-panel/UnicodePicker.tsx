@@ -422,9 +422,9 @@ function resolveSlashCommand(raw: string): string | null {
 
   // U+XXXX form
   const uMatch = /^[Uu]\+([0-9A-Fa-f]{1,6})$/.exec(trimmed);
-  if (uMatch) {
+  if (uMatch?.[1] !== undefined) {
     // uMatch[1] is the capture group — always present when this branch is reached.
-    const cp = parseInt(uMatch[1]!, 16);
+    const cp = parseInt(uMatch[1], 16);
     if (!isNaN(cp) && cp >= 0 && cp <= 0x10ffff) {
       return String.fromCodePoint(cp);
     }

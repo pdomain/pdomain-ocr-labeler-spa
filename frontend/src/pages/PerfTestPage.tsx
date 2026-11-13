@@ -50,7 +50,7 @@ function makeSyntheticPage(): PagePayload {
       word_matches.push({
         line_index: li,
         word_index: wi,
-        ocr_text: `w${li}-${wi}`,
+        ocr_text: `w${String(li)}-${String(wi)}`,
         ground_truth_text: "",
         match_status: "exact",
         normalized_match: false,
@@ -67,7 +67,7 @@ function makeSyntheticPage(): PagePayload {
     line_matches.push({
       line_index: li,
       paragraph_index: null,
-      ocr_line_text: `line ${li}`,
+      ocr_line_text: `line ${String(li)}`,
       ground_truth_line_text: "",
       word_matches,
       overall_match_status: "exact",

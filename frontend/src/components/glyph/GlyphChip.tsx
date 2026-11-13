@@ -33,8 +33,8 @@ export function GlyphChip({ lineIndex, wordIndex, kind, predicted, onClick }: Gl
   // Driver identifiers stay lowercase while wire values are uppercase.
   const testidKind = kind.toLowerCase();
   const testid = predicted
-    ? `word-glyph-chip-${lineIndex}-${wordIndex}-predicted-${testidKind}`
-    : `word-glyph-chip-${lineIndex}-${wordIndex}-${testidKind}`;
+    ? `word-glyph-chip-${String(lineIndex)}-${String(wordIndex)}-predicted-${testidKind}`
+    : `word-glyph-chip-${String(lineIndex)}-${String(wordIndex)}-${testidKind}`;
 
   const label = kind === "long_s" ? "ſ" : kind.toUpperCase();
 

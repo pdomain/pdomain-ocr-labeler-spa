@@ -77,7 +77,7 @@ function paraIds(page: PagePayload): (number | null)[] {
   const ids = new Set<number | null>();
   let hasNull = false;
   for (const lm of page.line_matches ?? []) {
-    if (lm.paragraph_index === null || lm.paragraph_index === undefined) {
+    if (typeof lm.paragraph_index !== "number") {
       hasNull = true;
     } else {
       ids.add(lm.paragraph_index);
@@ -116,7 +116,11 @@ function wordIdsInLine(page: PagePayload, lineId: number): [number, number][] {
     .filter((wm) => typeof wm.word_index === "number")
     .slice()
     .sort((a, b) => (a.word_index ?? 0) - (b.word_index ?? 0))
-    .map((wm) => [line.line_index, wm.word_index!] as [number, number]);
+    .flatMap((wm) => {
+      if (typeof wm.word_index !== "number") return [];
+      const id: [number, number] = [line.line_index, wm.word_index];
+      return [id];
+    });
 }
 
 // ─── Sibling navigation ──────────────────────────────────────────────────────
@@ -141,9 +145,10 @@ export function nextSibling(
   dir: WalkDirection,
 ): SelectionPath {
   if (path.wordId !== undefined) {
-    const [lineIdx] = path.wordId;
+    const wordId = path.wordId;
+    const [lineIdx] = wordId;
     const words = wordIdsInLine(page, lineIdx);
-    const idx = words.findIndex((w) => w[0] === path.wordId![0] && w[1] === path.wordId![1]);
+    const idx = words.findIndex((w) => w[0] === wordId[0] && w[1] === wordId[1]);
     const next = step(words, idx, dir);
     if (!next) return path;
     return { ...path, wordId: next };
@@ -223,21 +228,24 @@ export function walkDown(path: SelectionPath, page: PagePayload): SelectionPath 
   if (path.wordId !== undefined) return path;
   if (path.lineId !== undefined) {
     const words = wordIdsInLine(page, path.lineId);
-    if (words.length === 0) return path;
+    const firstWord = words[0];
+    if (!firstWord) return path;
     // words.length > 0 guaranteed above — non-null safe.
-    return { ...path, wordId: words[0]! };
+    return { ...path, wordId: firstWord };
   }
   if (path.paraId !== undefined) {
     const lines = linesInPara(page, path.paraId ?? null);
-    if (lines.length === 0) return path;
+    const firstLine = lines[0];
+    if (!firstLine) return path;
     // lines.length > 0 guaranteed above — non-null safe.
-    return { ...path, lineId: lines[0]!.line_index };
+    return { ...path, lineId: firstLine.line_index };
   }
   // From block or none: descend into first paragraph.
   const ids = paraIds(page);
-  if (ids.length === 0) return path;
+  const firstId = ids[0];
+  if (firstId === undefined) return path;
   // ids.length > 0 guaranteed above — non-null safe.
-  return { ...path, paraId: ids[0]! };
+  return { ...path, paraId: firstId };
 }
 
 // ─── Level inference ─────────────────────────────────────────────────────────

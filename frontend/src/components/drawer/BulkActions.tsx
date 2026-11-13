@@ -1,3 +1,4 @@
+import { optionalString, readField } from "../../lib/runtimeValues";
 // BulkActions.tsx — Bulk actions bar for multi-selected worklist items.
 // Spec: docs/specs/2026-05-15-hifi-redesign-plan.md Slice 23.
 //
@@ -195,7 +196,7 @@ export function BulkActions({ projectId, pageIndex }: BulkActionsProps) {
             ? "Done."
             : jobProgress.status === "error"
               ? `Error: ${jobProgress.error_message ?? "unknown"}`
-              : (jobProgress.progress?.message ?? "Running…")}
+              : (optionalString(readField(jobProgress.progress, "message")) ?? "Running…")}
         </div>
       )}
     </div>

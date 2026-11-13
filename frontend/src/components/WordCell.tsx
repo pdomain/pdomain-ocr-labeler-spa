@@ -34,7 +34,7 @@ import { GlyphChip } from "./glyph/GlyphChip";
 type WordMatch = components["schemas"]["WordMatch"];
 type MatchStatus = components["schemas"]["MatchStatus"];
 
-const STATUS_ICON: Record<MatchStatus, string> = {
+const STATUS_ICON: Partial<Record<MatchStatus, string>> = {
   exact: "✓",
   fuzzy: "≈",
   mismatch: "✗",
@@ -42,7 +42,7 @@ const STATUS_ICON: Record<MatchStatus, string> = {
   unmatched_gt: "●",
 };
 
-const STATUS_COLOR: Record<MatchStatus, string> = {
+const STATUS_COLOR: Partial<Record<MatchStatus, string>> = {
   exact: "text-status-exact",
   fuzzy: "text-status-fuzzy",
   mismatch: "text-status-mismatch",
@@ -90,7 +90,7 @@ export interface WordCellProps {
  * Falls back to `${line_index}-${word_index}` when `word_id` is absent.
  */
 export function WordCell({ word, onCommitGt, onEditWord, onValidate, onClearTag }: WordCellProps) {
-  const wordId = word.word_id ?? `${word.line_index}-${word.word_index}`;
+  const wordId = word.word_id ?? `${String(word.line_index)}-${String(word.word_index)}`;
   const [gtValue, setGtValue] = useState(word.ground_truth_text);
   const inputRef = useRef<HTMLInputElement>(null);
   // Track the committed value so we can detect changes at blur time.
@@ -151,14 +151,14 @@ export function WordCell({ word, onCommitGt, onEditWord, onValidate, onClearTag 
 
   return (
     <div
-      data-testid={`word-image-cell-${l}-${w}`}
+      data-testid={`word-image-cell-${String(l)}-${String(w)}`}
       data-testid-alias={`word-cell-${wordId}`}
       className="border border-border-1 rounded-sm p-1 flex flex-col gap-0.5 min-w-16 max-w-32 relative"
     >
       {/* Glyph corner badge (spec §5.3, testid §7) */}
       {badgeColor !== null && (
         <span
-          data-testid={`word-glyph-badge-${l}-${w}`}
+          data-testid={`word-glyph-badge-${String(l)}-${String(w)}`}
           className={`absolute top-0.5 right-0.5 w-1.5 h-1.5 rounded-xs ${badgeColor}`}
           aria-label="glyph annotation badge"
           title={
@@ -177,12 +177,12 @@ export function WordCell({ word, onCommitGt, onEditWord, onValidate, onClearTag 
           {/* Word selection checkbox (driver-contract §2.8) */}
           <input
             type="checkbox"
-            data-testid={`word-checkbox-${l}-${w}`}
-            aria-label={`Select word ${w} in line ${l}`}
+            data-testid={`word-checkbox-${String(l)}-${String(w)}`}
+            aria-label={`Select word ${String(w)} in line ${String(l)}`}
             className="w-3 h-3 accent-accent"
           />
           <span
-            data-testid={`word-status-icon-${l}-${w}`}
+            data-testid={`word-status-icon-${String(l)}-${String(w)}`}
             className={`text-xs font-bold ${statusColor}`}
             aria-label={`${word.match_status} match`}
             title={word.match_status}
@@ -193,8 +193,8 @@ export function WordCell({ word, onCommitGt, onEditWord, onValidate, onClearTag 
         <div className="flex items-center gap-0.5">
           {/* Per-word validate toggle (driver-contract §2.8) — STB-1 */}
           <button
-            data-testid={`word-validate-button-${l}-${w}`}
-            aria-label={`${word.is_validated ? "Unvalidate" : "Validate"} word ${w} in line ${l}`}
+            data-testid={`word-validate-button-${String(l)}-${String(w)}`}
+            aria-label={`${word.is_validated ? "Unvalidate" : "Validate"} word ${String(w)} in line ${String(l)}`}
             className={`text-[10px] px-0.5 leading-none ${word.is_validated ? "text-status-exact" : "text-ink-4 hover:text-status-exact"}`}
             title={word.is_validated ? "Unvalidate word" : "Validate word"}
             onClick={() => onValidate?.(l, w, !word.is_validated)}
@@ -207,8 +207,8 @@ export function WordCell({ word, onCommitGt, onEditWord, onValidate, onClearTag 
               would immediately overwrite the more specific word-level
               selection this button just made. */}
           <button
-            data-testid={`edit-word-button-${l}-${w}`}
-            aria-label={`Edit word ${w} in line ${l}`}
+            data-testid={`edit-word-button-${String(l)}-${String(w)}`}
+            aria-label={`Edit word ${String(w)} in line ${String(l)}`}
             className="text-[10px] text-ink-4 hover:text-ink-1 px-0.5 leading-none"
             title="Edit word"
             onClick={(e) => {
@@ -223,7 +223,7 @@ export function WordCell({ word, onCommitGt, onEditWord, onValidate, onClearTag 
 
       {/* Row 3: OCR text */}
       <div
-        data-testid={`ocr-text-label-${l}-${w}`}
+        data-testid={`ocr-text-label-${String(l)}-${String(w)}`}
         className="text-xs font-mono text-ink-2 truncate"
         title={word.ocr_text}
       >
@@ -236,7 +236,7 @@ export function WordCell({ word, onCommitGt, onEditWord, onValidate, onClearTag 
           {word.text_style_labels?.map((label) => (
             <span
               key={`style-${label}`}
-              data-testid={`word-tag-chip-${l}-${w}-${label}`}
+              data-testid={`word-tag-chip-${String(l)}-${String(w)}-${label}`}
               className="word-tag-chip flex items-center gap-0.5 px-1 py-0 text-[10px] rounded-sm"
               style={{ background: "color-mix(in srgb, var(--status-ocr) 12%, var(--bg-raised))" }}
               title={`Style: ${label}`}
@@ -247,7 +247,7 @@ export function WordCell({ word, onCommitGt, onEditWord, onValidate, onClearTag 
           {word.word_components?.map((comp) => (
             <span
               key={`comp-${comp}`}
-              data-testid={`word-tag-chip-${l}-${w}-${comp}`}
+              data-testid={`word-tag-chip-${String(l)}-${String(w)}-${comp}`}
               className="word-tag-chip flex items-center gap-0.5 px-1 py-0 text-[10px] rounded-sm"
               style={{
                 background: "color-mix(in srgb, var(--status-exact) 12%, var(--bg-raised))",
@@ -257,7 +257,7 @@ export function WordCell({ word, onCommitGt, onEditWord, onValidate, onClearTag 
               {comp}
               {/* STB-2: clear component tag */}
               <button
-                data-testid={`word-tag-clear-button-${l}-${w}-${comp}`}
+                data-testid={`word-tag-clear-button-${String(l)}-${String(w)}-${comp}`}
                 className="word-tag-clear-button text-[8px] text-ink-3 hover:text-ink-1 leading-none"
                 aria-label={`Remove component ${comp}`}
                 title={`Remove component ${comp}`}
@@ -275,7 +275,7 @@ export function WordCell({ word, onCommitGt, onEditWord, onValidate, onClearTag 
           every other GT input (MultiLineDetail WordRow, LineDetail GTRow). */}
       <input
         ref={inputRef}
-        data-testid={`gt-text-input-${l}-${w}`}
+        data-testid={`gt-text-input-${String(l)}-${String(w)}`}
         type="text"
         value={gtValue}
         onChange={(e) => {
@@ -296,10 +296,13 @@ export function WordCell({ word, onCommitGt, onEditWord, onValidate, onClearTag 
 
       {/* Glyph chip row (spec §5.3, testid §7) — shown when any annotations or predictions exist */}
       {showChipRow && (
-        <div data-testid={`word-glyph-chip-row-${l}-${w}`} className="flex flex-wrap gap-0.5">
+        <div
+          data-testid={`word-glyph-chip-row-${String(l)}-${String(w)}`}
+          className="flex flex-wrap gap-0.5"
+        >
           {(word.glyph_annotations?.ligatures ?? []).map((lig, i) => (
             <GlyphChip
-              key={`ann-${lig.kind}-${i}`}
+              key={`ann-${lig.kind}-${String(i)}`}
               lineIndex={l}
               wordIndex={w}
               kind={lig.kind}
@@ -309,7 +312,7 @@ export function WordCell({ word, onCommitGt, onEditWord, onValidate, onClearTag 
           ))}
           {(word.glyph_annotations?.long_s_positions ?? []).map((pos) => (
             <GlyphChip
-              key={`ls-${pos}`}
+              key={`ls-${String(pos)}`}
               lineIndex={l}
               wordIndex={w}
               kind="long_s"
@@ -333,7 +336,7 @@ export function WordCell({ word, onCommitGt, onEditWord, onValidate, onClearTag 
             )
             .map((pred, i) => (
               <GlyphChip
-                key={`pred-${pred.kind}-${i}`}
+                key={`pred-${pred.kind}-${String(i)}`}
                 lineIndex={l}
                 wordIndex={w}
                 kind={pred.kind}

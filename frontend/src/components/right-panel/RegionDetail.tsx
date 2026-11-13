@@ -1,3 +1,6 @@
+import { readField } from "../../lib/runtimeValues";
+import { layoutStructureFromUnknown } from "./layoutStructure";
+import { type LayoutStructureDraft } from "./layoutStructure";
 // RegionDetail.tsx — Region-level right panel: proposal review + confirmed
 // region editing.
 // Spec: docs/specs/2026-09-17-region-review-surface-design.md
@@ -76,11 +79,7 @@ import {
   type MembershipWord,
   type WordSignature,
 } from "../../lib/region-membership";
-import {
-  LayoutStructureEditor,
-  layoutStructureFromUnknown,
-  type LayoutStructureDraft,
-} from "./LayoutStructureEditor";
+import { LayoutStructureEditor } from "./LayoutStructureEditor";
 import type { components } from "../../api/types";
 
 type PagePayload = components["schemas"]["PagePayload"];
@@ -187,7 +186,7 @@ function LayoutHints({ value }: { value: unknown }) {
         return (
           <div
             key={`${String(hintIndex)}:${source}:${kind}`}
-            data-testid={`region-layout-hint-${hintIndex}`}
+            data-testid={`region-layout-hint-${String(hintIndex)}`}
             className="border border-border-1 rounded-sm p-2"
           >
             <p className="text-ink-2">
@@ -206,7 +205,7 @@ function LayoutHints({ value }: { value: unknown }) {
               return (
                 <p
                   key={`${String(lineIndex)}:${text}`}
-                  data-testid={`region-layout-hint-${hintIndex}-line-${lineIndex}`}
+                  data-testid={`region-layout-hint-${String(hintIndex)}-line-${String(lineIndex)}`}
                   className="text-ink-3"
                 >
                   {text} {stanza} {indent}
@@ -240,7 +239,7 @@ function LayoutReview({
       {warnings.map((warning, index) => (
         <p
           key={warning}
-          data-testid={`region-layout-warning-${index}`}
+          data-testid={`region-layout-warning-${String(index)}`}
           className="text-[11px] text-status-fuzzy"
         >
           {warning}
@@ -498,7 +497,7 @@ export function PageLayoutEvidence({ page }: { page: PagePayload }) {
       {warnings.map((warning, index) => (
         <p
           key={warning}
-          data-testid={`region-page-layout-warning-${index}`}
+          data-testid={`region-page-layout-warning-${String(index)}`}
           className="text-status-fuzzy"
         >
           {warning}
@@ -667,9 +666,9 @@ function ProposalDetail({
       key !== "structure_supported",
   );
   const [layoutStructure, setLayoutStructure] = useState(() =>
-    layoutStructureFromUnknown(proposal?.evidence?.["layout_structure"]),
+    layoutStructureFromUnknown(readField(proposal?.evidence, "layout_structure")),
   );
-  const canSaveLayoutStructure = proposal?.evidence?.["structure_supported"] !== false;
+  const canSaveLayoutStructure = readField(proposal?.evidence, "structure_supported") !== false;
 
   return (
     <div data-testid="region-detail" className="p-3 flex flex-col gap-3">

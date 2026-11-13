@@ -1,3 +1,4 @@
+import { optionalString, readField } from "../lib/runtimeValues";
 // OCRConfigModal.tsx — OCR configuration modal with auto-rotation and model-selection sections.
 // Spec: docs/specs/2026-05-12-auto-rotation-design.md §OCR config additions
 // Issues #264, #447
@@ -58,26 +59,41 @@ interface OcrConfigSnapshot {
   hf_pinned_revision: string | null;
 }
 
+function modelOptions(value: unknown): OcrModelOption[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((entry: unknown) => {
+    const key = optionalString(readField(entry, "key"));
+    const label = optionalString(readField(entry, "label"));
+    const source = optionalString(readField(entry, "source"));
+    const isDefault = readField(entry, "is_default");
+    if (
+      key === undefined ||
+      label === undefined ||
+      source === undefined ||
+      typeof isDefault !== "boolean"
+    ) {
+      return [];
+    }
+    return [{ key, label, source, is_default: isDefault }];
+  });
+}
+
 async function fetchOcrConfig(): Promise<OcrConfigSnapshot | null> {
   const resp = await fetch("/api/ocr-config");
   if (!resp.ok) return null;
-  const data = await resp.json();
+  const data: unknown = await resp.json();
+  const method = readField(data, "auto_rotate_method");
+  const onLoad = readField(data, "auto_rotate_on_load");
+  const available = readField(data, "auto_rotate_available");
   return {
-    auto_rotate_available: Boolean(data.auto_rotate_available),
-    auto_rotate_on_load: Boolean(data.auto_rotate_on_load ?? true),
-    auto_rotate_method: (data.auto_rotate_method ?? "auto") as AutoRotateMethod,
-    detection_options: Array.isArray(data.detection_options)
-      ? (data.detection_options as OcrModelOption[])
-      : [],
-    recognition_options: Array.isArray(data.recognition_options)
-      ? (data.recognition_options as OcrModelOption[])
-      : [],
-    selected_detection:
-      typeof data.selected_detection === "string" ? data.selected_detection : "stock",
-    selected_recognition:
-      typeof data.selected_recognition === "string" ? data.selected_recognition : "stock",
-    hf_pinned_revision:
-      typeof data.hf_pinned_revision === "string" ? data.hf_pinned_revision : null,
+    auto_rotate_available: typeof available === "boolean" ? available : false,
+    auto_rotate_on_load: typeof onLoad === "boolean" ? onLoad : true,
+    auto_rotate_method: method === "gt-best-match" || method === "layout" ? method : "auto",
+    detection_options: modelOptions(readField(data, "detection_options")),
+    recognition_options: modelOptions(readField(data, "recognition_options")),
+    selected_detection: optionalString(readField(data, "selected_detection")) ?? "stock",
+    selected_recognition: optionalString(readField(data, "selected_recognition")) ?? "stock",
+    hf_pinned_revision: optionalString(readField(data, "hf_pinned_revision")) ?? null,
   };
 }
 
@@ -203,13 +219,12 @@ export function OCRConfigModal({ open, onClose }: OCRConfigModalProps) {
   useEffect(() => {
     if (open && ocrConfig && !ocrConfigLoadedRef.current) {
       ocrConfigLoadedRef.current = true;
-      setPendingAutoRotate((prev) =>
-        prev === null
-          ? {
-              auto_rotate_on_load: ocrConfig.auto_rotate_on_load,
-              auto_rotate_method: ocrConfig.auto_rotate_method,
-            }
-          : prev,
+      setPendingAutoRotate(
+        (prev) =>
+          prev ?? {
+            auto_rotate_on_load: ocrConfig.auto_rotate_on_load,
+            auto_rotate_method: ocrConfig.auto_rotate_method,
+          },
       );
     }
     if (!open) {
@@ -300,7 +315,7 @@ export function OCRConfigModal({ open, onClose }: OCRConfigModalProps) {
 
   // S6.3: Done — POST pending auto-rotate if dirty, then close.
   function handleDone() {
-    if (!autoRotateDirty || !pendingAutoRotate) {
+    if (!autoRotateDirty) {
       onClose();
       return;
     }

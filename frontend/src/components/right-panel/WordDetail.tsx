@@ -1,3 +1,4 @@
+import { resolveWord } from "./../../lib/resolveWord";
 // WordDetail.tsx — Word detail editor (right panel, level="word").
 // Spec: docs/specs/2026-05-15-hifi-redesign-plan.md Slice 16 (scaffold),
 //       17 (Rebox/Erase), 18 (Structure).
@@ -53,12 +54,12 @@ import {
   useAcceptGlyphPrediction,
   useGlyphAnnotationPending,
 } from "../../hooks/useWordMutations";
-import { findWordByIndex, getWordOrder } from "../../lib/word-order";
+import { getWordOrder } from "../../lib/word-order";
 import type { UseBboxRefineTrackingResult } from "../../hooks/useBboxRefineTracking";
 import type { components } from "../../api/types";
 
 type PagePayload = components["schemas"]["PagePayload"];
-type WordMatch = components["schemas"]["WordMatch"];
+
 type GlyphAnnotationsModel = components["schemas"]["GlyphAnnotationsModel"];
 
 // ─── helpers ──────────────────────────────────────────────────────────────
@@ -92,15 +93,6 @@ function glyphAccordionHint(
   return markCount === 0
     ? "reviewed · none"
     : `reviewed · ${String(markCount)} mark${markCount === 1 ? "" : "s"}`;
-}
-
-export function resolveWord(
-  page: PagePayload,
-  lineId: number,
-  wordId: [number, number],
-): WordMatch | null {
-  const [, wi] = wordId;
-  return findWordByIndex(page, lineId, wi);
 }
 
 // ─── WordDetail ───────────────────────────────────────────────────────────

@@ -114,7 +114,7 @@ function buildParaNodes(lines: LineMatch[]): ParaNode[] {
   const nullParaLines: LineMatch[] = [];
 
   for (const lm of lines) {
-    if (lm.paragraph_index === null || lm.paragraph_index === undefined) {
+    if (typeof lm.paragraph_index !== "number") {
       nullParaLines.push(lm);
     } else {
       const existing = paraMap.get(lm.paragraph_index) ?? [];
@@ -126,11 +126,12 @@ function buildParaNodes(lines: LineMatch[]): ParaNode[] {
   const paras: ParaNode[] = [];
   const sortedKeys = Array.from(paraMap.keys()).sort((a, b) => a - b);
   for (const paraIdx of sortedKeys) {
-    const paraLines = paraMap.get(paraIdx)!;
+    const paraLines = paraMap.get(paraIdx);
+    if (!paraLines) continue;
     paras.push({
       kind: "para",
       paraIndex: paraIdx,
-      label: `Para ${paraIdx + 1}`,
+      label: `Para ${String(paraIdx + 1)}`,
       children: buildLineNodes(paraLines),
     });
   }
@@ -169,18 +170,19 @@ function buildBlockTree(page: PagePayload): BlockNode[] {
   const blocks: BlockNode[] = [];
   const sortedKeys = Array.from(blockMap.keys()).sort((a, b) => a - b);
   for (const blockIdx of sortedKeys) {
-    const blockLines = blockMap.get(blockIdx)!;
+    const blockLines = blockMap.get(blockIdx);
+    if (!blockLines) continue;
     blocks.push({
       kind: "block",
       blockIndex: blockIdx,
-      label: `Block ${blockIdx + 1}`,
+      label: `Block ${String(blockIdx + 1)}`,
       children: buildParaNodes(blockLines),
     });
   }
   if (nullBlockLines.length > 0) {
     // Synthesize a block index beyond the last real one for unsorted lines.
     // sortedKeys.length > 0 guard above ensures last element exists — non-null safe.
-    const syntheticIdx = sortedKeys.length > 0 ? sortedKeys[sortedKeys.length - 1]! + 1 : 0;
+    const syntheticIdx = (sortedKeys.at(-1) ?? -1) + 1;
     blocks.push({
       kind: "block",
       blockIndex: syntheticIdx,
@@ -203,7 +205,7 @@ function buildLineNodes(lines: LineMatch[]): LineNode[] {
     .map((lm) => ({
       kind: "line" as const,
       lineIndex: lm.line_index,
-      text: lm.ocr_line_text || `Line ${lm.line_index + 1}`,
+      text: lm.ocr_line_text || `Line ${String(lm.line_index + 1)}`,
       children: buildWordNodes(lm.word_matches, lm.line_index),
     }));
 }
@@ -232,7 +234,7 @@ interface FlatNode {
 function flattenParas(paras: ParaNode[], expanded: Set<string>, baseDepth: number): FlatNode[] {
   const result: FlatNode[] = [];
   for (const para of paras) {
-    const paraId = `para-${para.paraIndex ?? "null"}`;
+    const paraId = `para-${String(para.paraIndex ?? "null")}`;
     const paraExpanded = expanded.has(paraId);
     result.push({
       id: paraId,
@@ -243,7 +245,7 @@ function flattenParas(paras: ParaNode[], expanded: Set<string>, baseDepth: numbe
 
     if (paraExpanded) {
       for (const line of para.children) {
-        const lineId = `line-${line.lineIndex}`;
+        const lineId = `line-${String(line.lineIndex)}`;
         const lineExpanded = expanded.has(lineId);
         result.push({
           id: lineId,
@@ -254,7 +256,7 @@ function flattenParas(paras: ParaNode[], expanded: Set<string>, baseDepth: numbe
 
         if (lineExpanded) {
           for (const word of line.children) {
-            const wordId = `word-${word.lineIndex}-${word.wordIndex}`;
+            const wordId = `word-${String(word.lineIndex)}-${String(word.wordIndex)}`;
             result.push({ id: wordId, depth: baseDepth + 2, node: word, hasChildren: false });
           }
         }
@@ -268,7 +270,7 @@ function flattenParas(paras: ParaNode[], expanded: Set<string>, baseDepth: numbe
 function flattenBlocks(blocks: BlockNode[], expanded: Set<string>): FlatNode[] {
   const result: FlatNode[] = [];
   for (const block of blocks) {
-    const blockId = `block-${block.blockIndex}`;
+    const blockId = `block-${String(block.blockIndex)}`;
     const blockExpanded = expanded.has(blockId);
     result.push({ id: blockId, depth: 0, node: block, hasChildren: block.children.length > 0 });
 
@@ -362,13 +364,13 @@ function NodeRow({ flatNode, isSelected, isExpanded, onSelect, onToggle }: NodeR
   let monoId: string;
   if (node.kind === "block") {
     label = node.label;
-    monoId = `B-${node.blockIndex + 1}`;
+    monoId = `B-${String(node.blockIndex + 1)}`;
   } else if (node.kind === "para") {
     label = node.label;
-    monoId = node.paraIndex !== null ? `P-${node.paraIndex + 1}` : "P-?";
+    monoId = node.paraIndex !== null ? `P-${String(node.paraIndex + 1)}` : "P-?";
   } else if (node.kind === "line") {
     label = node.text;
-    monoId = `L-${node.lineIndex + 1}`;
+    monoId = `L-${String(node.lineIndex + 1)}`;
   } else {
     label = node.text;
     monoId = `W-${String(node.wordIndex + 1).padStart(3, "0")}`;
@@ -379,7 +381,7 @@ function NodeRow({ flatNode, isSelected, isExpanded, onSelect, onToggle }: NodeR
       data-testid={`hierarchy-node-${id}`}
       data-selected={isSelected ? "true" : undefined}
       data-kind={node.kind}
-      style={{ paddingLeft: `${depth * 16 + 8}px` }}
+      style={{ paddingLeft: `${String(depth * 16 + 8)}px` }}
       className={cn(
         "flex items-center gap-1.5 py-0.5 pr-2 cursor-pointer select-none text-[11px]",
         isSelected
@@ -439,7 +441,7 @@ export function Hierarchy({ page }: HierarchyProps) {
   const [kindFilter, setKindFilter] = useState<KindFilter>("all");
   const containerRef = useRef<HTMLDivElement>(null);
   const pageIdentity =
-    page === undefined || page === null ? null : `${page.project_id}\0${page.page_index}`;
+    page === undefined || page === null ? null : `${page.project_id}\0${String(page.page_index)}`;
   const previousPageIdentity = useRef(pageIdentity);
 
   // Tree ids reuse page-local indexes. A new page must not inherit an expanded
@@ -490,7 +492,7 @@ export function Hierarchy({ page }: HierarchyProps) {
         selectLine(pageIndex, node.lineIndex);
       } else if (node.kind === "word") {
         selectWord(pageIndex, node.lineIndex, node.wordIndex);
-      } else if (node.kind === "para" && node.paraIndex !== null) {
+      } else if (node.paraIndex !== null) {
         selectPara(pageIndex, node.paraIndex);
       }
     },
@@ -506,7 +508,7 @@ export function Hierarchy({ page }: HierarchyProps) {
     if (e.key === "ArrowDown") {
       const next = flat[idx + 1];
       if (next) handleSelect(next.id, next.node);
-    } else if (e.key === "ArrowUp") {
+    } else {
       const prev = flat[idx - 1];
       if (prev) handleSelect(prev.id, prev.node);
     }

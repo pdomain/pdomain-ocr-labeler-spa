@@ -26,7 +26,7 @@ const API_BASE = typeof window !== "undefined" ? window.location.origin : "http:
 
 async function fetchProjects(): Promise<ListProjectsResponse> {
   const res = await fetch(`${API_BASE}/api/projects`);
-  if (!res.ok) throw new Error(`GET /api/projects failed: ${res.status}`);
+  if (!res.ok) throw new Error(`GET /api/projects failed: ${String(res.status)}`);
   return res.json() as Promise<ListProjectsResponse>;
 }
 
@@ -36,7 +36,7 @@ async function postLoadProject(projectRoot: string): Promise<void> {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ project_root: projectRoot, initial_page_index: 0 }),
   });
-  if (!res.ok) throw new Error(`POST /api/projects/load failed: ${res.status}`);
+  if (!res.ok) throw new Error(`POST /api/projects/load failed: ${String(res.status)}`);
 }
 
 export interface ProjectLoadControlsProps {

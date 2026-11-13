@@ -55,7 +55,7 @@ import { WordCell } from "./WordCell";
 type LineMatch = components["schemas"]["LineMatch"];
 type MatchStatus = components["schemas"]["MatchStatus"];
 
-const STATUS_BG_STYLE: Record<MatchStatus, React.CSSProperties> = {
+const STATUS_BG_STYLE: Partial<Record<MatchStatus, React.CSSProperties>> = {
   exact: { background: "color-mix(in srgb, var(--status-exact) 12%, var(--bg-surface))" },
   fuzzy: { background: "color-mix(in srgb, var(--status-fuzzy) 12%, var(--bg-surface))" },
   mismatch: { background: "color-mix(in srgb, var(--status-mismatch) 12%, var(--bg-surface))" },
@@ -78,7 +78,7 @@ function CountChip({ kind, count, label, chipStyle, textClass }: CountChipProps)
       data-testid={`count-chip-${kind}`}
       className={`px-1.5 py-0.5 text-xs font-medium rounded-sm ${textClass}`}
       style={chipStyle}
-      title={`${count} ${label}`}
+      title={`${String(count)} ${label}`}
     >
       {count}
     </span>
@@ -169,13 +169,13 @@ export function LineCard({
   return (
     // eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions -- cosmetic click-to-select wrapper (see file header comment); the buttons, checkbox, and GT inputs it contains are the real interactive elements, each already independently keyboard-operable, and J/K already select a line by keyboard through the same `onSelectLine`/`focusWorklistLine` path.
     <div
-      data-testid={`line-card-${line.line_index}`}
+      data-testid={`line-card-${String(line.line_index)}`}
       className="border border-border-1 rounded-sm mb-1 overflow-hidden"
       onClick={() => onSelectLine?.(line.line_index)}
     >
       {/* Header */}
       <div
-        data-testid={`line-card-${line.line_index}-header`}
+        data-testid={`line-card-${String(line.line_index)}-header`}
         className="flex items-center gap-1 px-2 py-1"
         style={bgStyle}
       >
@@ -231,15 +231,15 @@ export function LineCard({
           {paragraphFirst && line.paragraph_index !== null && (
             <input
               type="checkbox"
-              data-testid={`paragraph-checkbox-${line.paragraph_index}`}
-              aria-label={`Select paragraph ${line.paragraph_index}`}
+              data-testid={`paragraph-checkbox-${String(line.paragraph_index)}`}
+              aria-label={`Select paragraph ${String(line.paragraph_index)}`}
               className="w-3 h-3 accent-accent"
             />
           )}
           <input
             type="checkbox"
-            data-testid={`line-checkbox-${line.line_index}`}
-            aria-label={`Select line ${line.line_index}`}
+            data-testid={`line-checkbox-${String(line.line_index)}`}
+            aria-label={`Select line ${String(line.line_index)}`}
             className="w-3 h-3 accent-accent"
           />
         </div>
@@ -250,7 +250,7 @@ export function LineCard({
           {!isExact && (
             <>
               <button
-                data-testid={`line-gt-to-ocr-button-${line.line_index}`}
+                data-testid={`line-gt-to-ocr-button-${String(line.line_index)}`}
                 className="px-1.5 py-0.5 text-xs border border-border-2 rounded-sm bg-bg-surface hover:bg-bg-raised"
                 onClick={(e) => {
                   // Own job only — don't let the click also select the line
@@ -263,7 +263,7 @@ export function LineCard({
                 GT→OCR
               </button>
               <button
-                data-testid={`line-ocr-to-gt-button-${line.line_index}`}
+                data-testid={`line-ocr-to-gt-button-${String(line.line_index)}`}
                 className="px-1.5 py-0.5 text-xs border border-border-2 rounded-sm bg-bg-surface hover:bg-bg-raised"
                 onClick={(e) => {
                   e.stopPropagation();
@@ -277,7 +277,7 @@ export function LineCard({
           )}
 
           <button
-            data-testid={`line-validate-button-${line.line_index}`}
+            data-testid={`line-validate-button-${String(line.line_index)}`}
             className="px-1.5 py-0.5 text-xs border border-border-2 rounded-sm bg-bg-surface hover:bg-bg-raised"
             onClick={(e) => {
               e.stopPropagation();
@@ -288,7 +288,7 @@ export function LineCard({
           </button>
 
           <button
-            data-testid={`line-delete-button-${line.line_index}`}
+            data-testid={`line-delete-button-${String(line.line_index)}`}
             className="px-1.5 py-0.5 text-xs border border-status-mismatch/50 text-status-mismatch rounded-sm bg-bg-surface hover:bg-bg-raised"
             onClick={(e) => {
               e.stopPropagation();
@@ -309,7 +309,7 @@ export function LineCard({
         <div className="flex flex-row flex-wrap gap-1 px-2 py-1 bg-bg-surface">
           {line.word_matches.map((word, wordIdx) => (
             <WordCell
-              key={word.word_id ?? `${line.line_index}-${wordIdx}`}
+              key={word.word_id ?? `${String(line.line_index)}-${String(wordIdx)}`}
               word={word}
               onCommitGt={onCommitGt}
               onEditWord={onEditWord}

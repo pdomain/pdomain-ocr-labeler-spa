@@ -1,3 +1,4 @@
+import { arrayLength } from "../lib/runtimeValues";
 // ProjectPage.tsx — real labeling shell.
 //
 // Spec: specs/22-page-surface-wireup.md §3 (Layout), §4 (Data flow),
@@ -872,7 +873,7 @@ export default function ProjectPage() {
     undoPage.isPending ||
     redoPage.isPending ||
     pageLoadJobId !== null;
-  const totalPages = projectQ.data?.image_paths?.length ?? 0;
+  const totalPages = arrayLength(projectQ.data?.image_paths) ?? 0;
   const currentPageNo = idx0 + 1;
   useGlobalHotkeys({
     disabled: isAnyMutationPending,
@@ -1089,7 +1090,7 @@ export default function ProjectPage() {
       onConfirm: () => {
         reloadOcr.mutate(undefined, {
           onSuccess: (data) => {
-            trackJob(data as { job_id?: string | null } | undefined | null);
+            trackJob(data);
           },
           onSettled: () => {
             invalidatePage();
@@ -1756,7 +1757,7 @@ export default function ProjectPage() {
         className="grid flex-1 min-h-0 bg-bg-page"
         style={{
           gridTemplateColumns: `minmax(0, 1fr) ${drawerOpen ? "320px" : "32px"} ${
-            rightPanelOpen ? `${rightWidth}px` : "32px"
+            rightPanelOpen ? `${String(rightWidth)}px` : "32px"
           }`,
         }}
       >

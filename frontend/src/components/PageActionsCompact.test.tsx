@@ -629,6 +629,14 @@ function mockEventSource() {
         progressListener?.({ data: JSON.stringify(jobFrame(data)) } as MessageEvent);
       });
     },
+    dispatchProgress(jobId: string, status: string, message: unknown) {
+      const frame = jobFrame({ job_id: jobId, status });
+      act(() => {
+        progressListener?.({
+          data: JSON.stringify({ ...frame, progress: { ...frame.progress, message } }),
+        } as MessageEvent);
+      });
+    },
   };
 }
 
@@ -940,6 +948,49 @@ describe("PageActionsCompact: Cancel action on book-scoped run toasts (P1-CANCEL
     await user.click(screen.getByTestId("page-actions-compact-overflow"));
     await user.click(await screen.findByTestId(run.menuTestId));
     await waitFor(() => expect(findLatestLoadingCall(run.jobId)).toBeDefined());
+  }
+
+  for (const run of CANCELLABLE_RUNS.filter((run) => run.label !== "Auto-rotate all")) {
+    const messages =
+      run.label === "Propose page kinds"
+        ? {
+            running: "Proposing page kinds…",
+            complete: "Page kind proposals complete",
+            cancelled: "Page kind proposals cancelled",
+          }
+        : {
+            running: "Proposing regions…",
+            complete: "Region proposals complete",
+            cancelled: "Region proposals cancelled",
+          };
+    for (const status of ["running", "complete", "cancelled"] as const) {
+      it.each([undefined, "", null, 42, {}])(
+        `${run.label} ${status}: keeps its fallback for %j messages`,
+        async (message) => {
+          stubPage(false);
+          const es = mockEventSource();
+          const user = userEvent.setup();
+          renderCompact();
+          try {
+            await startRun(user, run);
+            toastMock.loading.mockClear();
+            toastMock.mockClear();
+            es.dispatchProgress(run.jobId, status, message);
+            const calls =
+              status === "running" ? toastMock.loading.mock.calls : toastMock.mock.calls;
+            await waitFor(() =>
+              expect(
+                calls.some(
+                  ([text, options]) => text === messages[status] && options?.id === run.jobId,
+                ),
+              ).toBe(true),
+            );
+          } finally {
+            vi.unstubAllGlobals();
+          }
+        },
+      );
+    }
   }
 
   for (const run of CANCELLABLE_RUNS) {

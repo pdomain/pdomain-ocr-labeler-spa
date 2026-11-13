@@ -1,3 +1,4 @@
+import { optionalNumber, optionalString } from "../../lib/runtimeValues";
 // LineDetail.tsx — Line-level right panel: Line tab + Words tab.
 // Spec: docs/specs/2026-05-15-hifi-redesign-plan.md Slice 21, P5.e, P5.f.
 //
@@ -100,13 +101,10 @@ interface StructureBoxProps {
 
 function StructureBox({ line }: StructureBoxProps) {
   const pip = statusPip(line.overall_match_status);
-  const validatedCount = line.validated_word_count ?? 0;
-  const totalCount = line.total_word_count ?? line.word_matches.length;
+  const validatedCount = optionalNumber(line.validated_word_count) ?? 0;
+  const totalCount = optionalNumber(line.total_word_count) ?? line.word_matches.length;
   const lineNum = line.line_index + 1;
-  const paraNum =
-    line.paragraph_index !== null && line.paragraph_index !== undefined
-      ? line.paragraph_index + 1
-      : null;
+  const paraNum = typeof line.paragraph_index === "number" ? line.paragraph_index + 1 : null;
 
   return (
     <div
@@ -136,7 +134,7 @@ interface GTRowProps {
 }
 
 function GTRow({ line, projectId, pageIndex }: GTRowProps) {
-  const [gtText, setGtText] = useState(line.ground_truth_line_text ?? "");
+  const [gtText, setGtText] = useState(optionalString(line.ground_truth_line_text) ?? "");
   const setLineGt = useSetLineGt(projectId, pageIndex);
 
   // Sync local state when the server refreshes the line (after a save).
@@ -145,8 +143,10 @@ function GTRow({ line, projectId, pageIndex }: GTRowProps) {
   // changes, not on every render where `gtText` differs from it (the user is
   // expected to diverge from the server value while editing).
   // https://react.dev/learn/you-might-not-need-an-effect#adjusting-some-state-when-a-prop-changes
-  const [prevServerGt, setPrevServerGt] = useState(line.ground_truth_line_text ?? "");
-  const serverGt = line.ground_truth_line_text ?? "";
+  const [prevServerGt, setPrevServerGt] = useState(
+    optionalString(line.ground_truth_line_text) ?? "",
+  );
+  const serverGt = optionalString(line.ground_truth_line_text) ?? "";
   if (serverGt !== prevServerGt) {
     setPrevServerGt(serverGt);
     setGtText(serverGt);
@@ -154,7 +154,7 @@ function GTRow({ line, projectId, pageIndex }: GTRowProps) {
 
   function commit() {
     const trimmed = gtText.trim();
-    const original = (line.ground_truth_line_text ?? "").trim();
+    const original = (optionalString(line.ground_truth_line_text) ?? "").trim();
     if (trimmed !== original) {
       setLineGt.mutate({ lineIndex: line.line_index, text: trimmed });
     }
@@ -182,7 +182,7 @@ function GTRow({ line, projectId, pageIndex }: GTRowProps) {
             e.currentTarget.blur();
           }
           if (e.key === "Escape") {
-            setGtText(line.ground_truth_line_text ?? "");
+            setGtText(optionalString(line.ground_truth_line_text) ?? "");
           }
         }}
         placeholder="Enter ground truth text…"
@@ -210,8 +210,7 @@ function LineDetailInner({ line, projectId, pageIndex }: LineDetailInnerProps) {
   // Density pref — stored in ui-prefs as "lineWordsDensity".
 
   const [densityPref, setDensityPref] = useState<WordDensity>(
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    () => ((useUiPrefs.getState() as any).lineWordsDensity as WordDensity) ?? "cards",
+    () => useUiPrefs.getState().lineWordsDensity,
   );
 
   // Bulk-selected word indices (P5.f).
@@ -234,8 +233,7 @@ function LineDetailInner({ line, projectId, pageIndex }: LineDetailInnerProps) {
   function toggleDensity() {
     const next: WordDensity = densityPref === "cards" ? "rows" : "cards";
     setDensityPref(next);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-argument
-    useUiPrefs.setState({ lineWordsDensity: next } as any);
+    useUiPrefs.setState({ lineWordsDensity: next });
   }
 
   function toggleWordCheck(wordIndex: number, checked: boolean) {
@@ -531,7 +529,7 @@ function WordRowsView({ line }: { line: LineMatch }) {
       {line.word_matches.map((wm) => (
         <div
           key={wm.word_index}
-          data-testid={`line-detail-word-row-${wm.word_index}`}
+          data-testid={`line-detail-word-row-${String(wm.word_index)}`}
           className="flex items-center gap-2 px-3 py-1 border-b border-border-1/50 hover:bg-bg-raised/60 transition-colors"
         >
           <StatusPip status={statusPip(wm.match_status)} />

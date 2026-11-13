@@ -126,7 +126,7 @@ export function useToolbarButtonStates(selection: Selection, page: PageData): Bu
   const wordValidated = new Map<string, boolean>();
   for (const line of page.lines) {
     for (const word of line.words) {
-      wordValidated.set(`${word.line_index}-${word.word_index}`, word.is_validated);
+      wordValidated.set(`${String(word.line_index)}-${String(word.word_index)}`, word.is_validated);
     }
   }
 
@@ -165,10 +165,10 @@ export function useToolbarButtonStates(selection: Selection, page: PageData): Bu
 
   // Unknown words (not in pageData) are treated as unvalidated
   const selectedWordsHaveUnvalidated = selection.selected_words.some(
-    ([li, wi]) => wordValidated.get(`${li}-${wi}`) !== true,
+    ([li, wi]) => wordValidated.get(`${String(li)}-${String(wi)}`) !== true,
   );
   const selectedWordsHaveValidated = selection.selected_words.some(
-    ([li, wi]) => wordValidated.get(`${li}-${wi}`) === true,
+    ([li, wi]) => wordValidated.get(`${String(li)}-${String(wi)}`) === true,
   );
 
   return {

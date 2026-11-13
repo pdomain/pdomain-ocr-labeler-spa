@@ -1,3 +1,4 @@
+import { readField } from "../../../lib/runtimeValues";
 // StructureSection.tsx — Structure accordion section for word detail editor.
 // Spec: docs/specs/2026-05-15-hifi-redesign-plan.md Slice 18.
 // P3.d (Gap 37): neighbors-strip + merge preview + gap-picker + vertical-split.
@@ -116,7 +117,7 @@ function SplitPicker({ text, splitPos, onPick }: SplitPickerProps) {
           <button
             key={i}
             type="button"
-            title={`Split after position ${i + 1}`}
+            title={`Split after position ${String(i + 1)}`}
             onClick={() => {
               onPick(i + 1);
             }}
@@ -211,7 +212,7 @@ export function StructureSection({ word, page, projectId, pageIndex }: Structure
    */
   const handleGapCommit = useCallback(
     (delta: number) => {
-      if (!hasNext || !next?.bbox) return;
+      if (!hasNext || !readField(next, "bbox")) return;
       const nextBbox = next.bbox;
       // Clamp: gap >= 0 (no overlap) and next.x + delta >= 0.
       const minDelta = Math.max(-currentGap, -nextBbox.x);
@@ -268,7 +269,9 @@ export function StructureSection({ word, page, projectId, pageIndex }: Structure
             onClick={() => {
               requestMerge("left");
             }}
-            onMouseEnter={() => hasPrev && setHoveredMerge("left")}
+            onMouseEnter={() => {
+              if (hasPrev) setHoveredMerge("left");
+            }}
             onMouseLeave={() => {
               setHoveredMerge(null);
             }}
@@ -283,7 +286,9 @@ export function StructureSection({ word, page, projectId, pageIndex }: Structure
             onClick={() => {
               requestMerge("right");
             }}
-            onMouseEnter={() => hasNext && setHoveredMerge("right")}
+            onMouseEnter={() => {
+              if (hasNext) setHoveredMerge("right");
+            }}
             onMouseLeave={() => {
               setHoveredMerge(null);
             }}
@@ -302,7 +307,9 @@ export function StructureSection({ word, page, projectId, pageIndex }: Structure
       <div className="flex flex-col gap-1">
         <p className="text-[10px] text-ink-3 uppercase tracking-wide">
           Word gap:{" "}
-          <span className="font-mono text-ink-2">{gapDelta > 0 ? `+${gapDelta}` : gapDelta}px</span>
+          <span className="font-mono text-ink-2">
+            {gapDelta > 0 ? `+${String(gapDelta)}` : gapDelta}px
+          </span>
         </p>
         <input
           data-testid="structure-gap-slider"
@@ -322,7 +329,7 @@ export function StructureSection({ word, page, projectId, pageIndex }: Structure
             handleGapCommit(Number(e.target.value));
           }}
           className="w-full accent-accent cursor-pointer disabled:opacity-50"
-          aria-label={`Word gap: ${gapDelta > 0 ? `+${gapDelta}` : gapDelta}px`}
+          aria-label={`Word gap: ${String(gapDelta > 0 ? `+${String(gapDelta)}` : gapDelta)}px`}
         />
         <div className="flex justify-between text-[9px] text-ink-4">
           <span>−10px</span>
@@ -334,7 +341,7 @@ export function StructureSection({ word, page, projectId, pageIndex }: Structure
       {/* ── 4. Vertical-split affordance ─────────────────────────────────── */}
       <div className="flex flex-col gap-1">
         <p className="text-[10px] text-ink-3 uppercase tracking-wide">
-          Split{splitPos !== null ? ` at position ${splitPos}` : " — click a character"}
+          Split{splitPos !== null ? ` at position ${String(splitPos)}` : " — click a character"}
         </p>
         <SplitPicker text={currentText} splitPos={splitPos} onPick={setSplitPos} />
         <Button
@@ -345,7 +352,7 @@ export function StructureSection({ word, page, projectId, pageIndex }: Structure
           onClick={handleSplit}
           className="mt-1 self-start"
         >
-          {splitPos !== null ? `Split at position ${splitPos}` : "Split at midpoint"}
+          {splitPos !== null ? `Split at position ${String(splitPos)}` : "Split at midpoint"}
         </Button>
       </div>
 

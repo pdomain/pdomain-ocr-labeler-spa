@@ -1,3 +1,4 @@
+import { ToastMessage } from "../components/ToastMessage";
 // useNotificationStream.tsx — subscribe to the backend SSE notification stream
 // and dispatch sonner toasts per notification kind.
 //
@@ -32,9 +33,6 @@ interface NotificationEvent {
 const SSE_URL = "/api/notifications/stream";
 
 /** Wrap message in a span with the driver-contract testid. */
-function ToastMessage({ kind, id, message }: { kind: string; id: string; message: string }) {
-  return <span data-testid={`notification-${kind}-${id}`}>{message}</span>;
-}
 
 /**
  * Open an EventSource against /api/notifications/stream and dispatch

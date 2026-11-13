@@ -1,3 +1,4 @@
+import { optionalNumber } from "../lib/runtimeValues";
 // RootPage.tsx — route element for "/".
 // Issue #84 (EmptyProjectState) + Issue #274 (RootPage + session-state fetch) + Slice 27.
 // Issue #327 (auto-resume after server restart: POST /api/projects/load before navigate).
@@ -64,13 +65,13 @@ const API_BASE = typeof window !== "undefined" ? window.location.origin : "http:
 
 async function fetchSessionState(): Promise<SessionStateResponse> {
   const res = await fetch(`${API_BASE}/api/session-state`);
-  if (!res.ok) throw new Error(`GET /api/session-state failed: ${res.status}`);
+  if (!res.ok) throw new Error(`GET /api/session-state failed: ${String(res.status)}`);
   return res.json() as Promise<SessionStateResponse>;
 }
 
 async function fetchProjects(): Promise<ListProjectsResponse> {
   const res = await fetch(`${API_BASE}/api/projects`);
-  if (!res.ok) throw new Error(`GET /api/projects failed: ${res.status}`);
+  if (!res.ok) throw new Error(`GET /api/projects failed: ${String(res.status)}`);
   return res.json() as Promise<ListProjectsResponse>;
 }
 
@@ -80,7 +81,7 @@ async function postLoadProject(projectPath: string): Promise<void> {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ project_root: projectPath, initial_page_index: 0 }),
   });
-  if (!res.ok) throw new Error(`POST /api/projects/load failed: ${res.status}`);
+  if (!res.ok) throw new Error(`POST /api/projects/load failed: ${String(res.status)}`);
 }
 
 /** DELETE /api/projects/{id} — permanently removes the project (P4.2). */
@@ -88,7 +89,7 @@ async function deleteProject(projectId: string): Promise<void> {
   const res = await fetch(`${API_BASE}/api/projects/${encodeURIComponent(projectId)}`, {
     method: "DELETE",
   });
-  if (!res.ok) throw new Error(`DELETE /api/projects/${projectId} failed: ${res.status}`);
+  if (!res.ok) throw new Error(`DELETE /api/projects/${projectId} failed: ${String(res.status)}`);
 }
 
 /** Derive the project ID from an absolute project-directory path.
@@ -176,7 +177,7 @@ function ProjectCard({ project }: { project: ProjectKey }) {
   const [menuOpen, setMenuOpen] = useState(false);
 
   const openMutation = useMutation({
-    mutationFn: () => postLoadProject(String(project.project_root)),
+    mutationFn: () => postLoadProject(project.project_root),
     onSuccess: () => {
       // Navigate only when the load succeeded — do not navigate on error.
       void navigate(`/projects/${encodeURIComponent(project.project_id)}/pages/pageno/1`);
@@ -267,7 +268,7 @@ function ProjectCard({ project }: { project: ProjectKey }) {
           className="text-[11px] text-ink-3"
         >
           {pageCount !== null
-            ? `${pageCount} page${pageCount === 1 ? "" : "s"}`
+            ? `${String(pageCount)} page${pageCount === 1 ? "" : "s"}`
             : "Page count unavailable"}
         </div>
 
@@ -604,7 +605,7 @@ export default function RootPage() {
     onSuccess: () => {
       loadStateRef.current = "success";
       if (!derivedProjectId || !data) return;
-      const pageNo = (data.last_page_index ?? 0) + 1;
+      const pageNo = (optionalNumber(data.last_page_index) ?? 0) + 1;
       void navigate(
         `/projects/${encodeURIComponent(derivedProjectId)}/pages/pageno/${encodeURIComponent(String(pageNo))}`,
         { replace: true },

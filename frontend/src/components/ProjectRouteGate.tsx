@@ -36,7 +36,7 @@ type ListProjectsResponse = components["schemas"]["ListProjectsResponse"];
 /** Resolve project_root from the disk scan, then POST /api/projects/load. */
 async function autoLoadProject(projectId: string): Promise<void> {
   const listRes = await fetch("/api/projects");
-  if (!listRes.ok) throw new Error(`GET /api/projects failed: ${listRes.status}`);
+  if (!listRes.ok) throw new Error(`GET /api/projects failed: ${String(listRes.status)}`);
   const list = (await listRes.json()) as ListProjectsResponse;
   const match = list.projects.find((p) => p.project_id === projectId);
   if (!match) throw new Error(`project not found on disk: ${projectId}`);
@@ -46,7 +46,7 @@ async function autoLoadProject(projectId: string): Promise<void> {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ project_root: match.project_root, initial_page_index: 0 }),
   });
-  if (!res.ok) throw new Error(`POST /api/projects/load failed: ${res.status}`);
+  if (!res.ok) throw new Error(`POST /api/projects/load failed: ${String(res.status)}`);
 }
 
 export function ProjectRouteGate({ children }: { children: React.ReactNode }) {

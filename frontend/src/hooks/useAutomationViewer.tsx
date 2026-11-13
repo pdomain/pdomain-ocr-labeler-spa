@@ -261,21 +261,19 @@ export function AutomationViewerProvider({ children }: { children: ReactNode }) 
       };
     };
 
+    const isCancelled = () => cancellation.signal.aborted;
+
     const refreshViewerCommand = async (viewerId: string): Promise<void> => {
-      if (cancellation.signal.aborted) return;
+      if (isCancelled()) return;
       const state = await fetchViewerState(viewerId);
-      if (
-        cancellation.signal.aborted ||
-        viewerIdRef.current !== viewerId ||
-        state.viewer_id !== viewerId
-      ) {
+      if (isCancelled() || viewerIdRef.current !== viewerId || state.viewer_id !== viewerId) {
         return;
       }
       applyViewerState(state);
     };
 
     const synchronize = async (): Promise<void> => {
-      if (cancellation.signal.aborted || reconnecting) return;
+      if (isCancelled() || reconnecting) return;
       reconnecting = true;
       try {
         let state: ViewerState;
@@ -286,7 +284,7 @@ export function AutomationViewerProvider({ children }: { children: ReactNode }) 
           clearStoredViewerId();
           state = await registerViewer(null);
         }
-        if (cancellation.signal.aborted) return;
+        if (isCancelled()) return;
         if (viewerIdRef.current !== null && viewerIdRef.current !== state.viewer_id) {
           commandRef.current = null;
           setCommand(null);
@@ -297,16 +295,16 @@ export function AutomationViewerProvider({ children }: { children: ReactNode }) 
         applyViewerState(state);
 
         const snapshot = await fetchAutomationState();
-        if (cancellation.signal.aborted) return;
+        if (isCancelled()) return;
         revision = snapshot.revision;
         await invalidateDomainCaches();
-        if (cancellation.signal.aborted) return;
+        if (isCancelled()) return;
         applyViewerState(
           snapshot.viewers.find((viewer) => viewer.viewer_id === state.viewer_id) ?? state,
         );
         connect();
       } catch (error: unknown) {
-        if (!cancellation.signal.aborted) {
+        if (!isCancelled()) {
           console.error("automation viewer synchronization failed", error);
           scheduleReconnect();
         }

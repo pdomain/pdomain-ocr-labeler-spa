@@ -85,6 +85,7 @@ export const THEME_STORAGE_KEY = "pdl.ui.theme";
 const VALID_THEME_VALUES = new Set<string>(["dark", "light", "system"]);
 
 export interface UiPrefsState {
+  lineWordsDensity: "cards" | "rows";
   lineFilter: string | null;
   layerVisibility: LayerVisibility;
   /** Horizontal splitter ratio in [0.2, 0.8]. 0.5 = panes equal width. */
@@ -204,6 +205,7 @@ function setupSystemListener(theme: ThemePreference, notifyFn: () => void) {
 }
 
 const INITIAL_PREFS: UiPrefsState = {
+  lineWordsDensity: "cards",
   lineFilter: null,
   layerVisibility: {
     block: true,

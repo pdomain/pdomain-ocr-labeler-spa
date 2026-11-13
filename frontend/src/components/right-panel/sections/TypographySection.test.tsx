@@ -145,6 +145,7 @@ describe("TypographySection", () => {
     await user.click(screen.getByRole("button", { name: "Whole word" }));
     await user.click(screen.getByRole("button", { name: "Reviewed regular" }));
     expect(await screen.findByRole("alert")).toHaveTextContent(/stale/i);
+    expect(screen.getByRole("alert")).toHaveTextContent("Stale typography head.");
   });
 
   it("splits and merges adjacent grapheme spans", async () => {

@@ -113,7 +113,7 @@ function parseJobProgressEvent(raw: unknown): JobProgressEvent | null {
     parsed.result = null;
   } else if (typeof obj["result"] === "object") {
     // Validated string boundary (object check above); see doc comment above.
-    parsed.result = obj["result"] as Record<string, unknown>;
+    parsed.result = obj["result"];
   }
   return parsed;
 }

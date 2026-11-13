@@ -388,7 +388,7 @@ export default function PageImageCanvas({
         region: "select",
       };
       const target = modeMap[railMode];
-      if (target !== undefined && viewportStore.getState().mode !== target) {
+      if (viewportStore.getState().mode !== target) {
         viewportStore.setState({ mode: target, pendingReboxTarget: null });
       }
     });
@@ -474,7 +474,7 @@ export default function PageImageCanvas({
         if (word.word_index === null) continue;
         const isExactAndValidated = word.match_status === "exact" && word.is_validated;
         items.push({
-          id: `${line.line_index}-${word.word_index}`,
+          id: `${String(line.line_index)}-${String(word.word_index)}`,
           bbox: encoded ? rectToDisplay(word.bbox, encoded) : word.bbox,
           dimmed: isMismatchOnly ? isExactAndValidated : false,
         });
@@ -746,7 +746,9 @@ export default function PageImageCanvas({
           // click hid WordDetail behind LineDetail for one-word lines
           // (test_click_word_bbox_on_image_opens_word_detail).
           const parts = hit.id.split("-").map(Number);
-          toggleWord(pageIndex, parts[0]!, parts[1]!, modifier);
+          const [lineIndex, wordIndex] = parts;
+          if (lineIndex === undefined || wordIndex === undefined) return;
+          toggleWord(pageIndex, lineIndex, wordIndex, modifier);
         }
         useUiPrefs.setState({ rightPanelOpen: true });
       }

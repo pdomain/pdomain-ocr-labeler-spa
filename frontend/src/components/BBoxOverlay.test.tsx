@@ -1,3 +1,4 @@
+import { LAYER_COLORS } from "./layerColors";
 // BBoxOverlay.test.tsx — Konva-rect rendering + sidecar test (#298, #328)
 //
 // Spec: specs/21-konva-renderer.md §6 (overlay rendering), §12 (testids)
@@ -116,7 +117,6 @@ vi.mock("react-konva", () => ({
 import { Layer, Stage } from "react-konva";
 import {
   BBoxOverlay,
-  LAYER_COLORS,
   SELECTION_STROKE_WIDTH,
   MISMATCH_DIM_OPACITY,
   type BBoxItem,

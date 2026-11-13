@@ -57,22 +57,22 @@ function groupByBlock(
 
     const blockKey: number | null = lm.block_index ?? null;
 
-    if (!blockMap.has(blockKey)) {
-      blockMap.set(blockKey, new Map());
+    let lineMap = blockMap.get(blockKey);
+    if (!lineMap) {
+      lineMap = new Map();
+      blockMap.set(blockKey, lineMap);
       blockOrder.push(blockKey);
     }
-    const lineMap = blockMap.get(blockKey)!;
-
-    if (!lineMap.has(lineIdx)) {
-      lineMap.set(lineIdx, { lineMatch: lm, wordIndices: [] });
-    }
-    lineMap.get(lineIdx)!.wordIndices.push(wordIdx);
+    const entry = lineMap.get(lineIdx) ?? { lineMatch: lm, wordIndices: [] };
+    entry.wordIndices.push(wordIdx);
+    lineMap.set(lineIdx, entry);
   }
 
   // Convert inner Map → array in line_index order
   const result = new Map<number | null, { lineMatch: LineMatch; wordIndices: number[] }[]>();
   for (const blockKey of blockOrder) {
-    const lineMap = blockMap.get(blockKey)!;
+    const lineMap = blockMap.get(blockKey);
+    if (!lineMap) continue;
     const lines = Array.from(lineMap.values()).sort(
       (a, b) => a.lineMatch.line_index - b.lineMatch.line_index,
     );
@@ -110,7 +110,7 @@ export function MultiWordDetail({
       {/* ── Word groups (by block then by line) ── */}
       {Array.from(grouped.entries()).map(([blockKey, lines]) => {
         const blockTestId =
-          blockKey !== null ? `multi-word-block-${blockKey}` : "multi-word-block-null";
+          blockKey !== null ? `multi-word-block-${String(blockKey)}` : "multi-word-block-null";
 
         return (
           <div
@@ -123,7 +123,7 @@ export function MultiWordDetail({
               data-testid={`${blockTestId}-header`}
               className="text-[9px] text-ink-4 uppercase tracking-wider font-semibold"
             >
-              {blockKey !== null ? `Block ${blockKey}` : "Block (unassigned)"}
+              {blockKey !== null ? `Block ${String(blockKey)}` : "Block (unassigned)"}
             </div>
 
             {/* Lines within this block */}
@@ -139,16 +139,17 @@ export function MultiWordDetail({
                     return (
                       <span
                         key={wordIdx}
-                        data-testid={`multi-word-item-${lineMatch.line_index}-${wordIdx}`}
+                        data-testid={`multi-word-item-${String(lineMatch.line_index)}-${String(wordIdx)}`}
                         className="px-1.5 py-0.5 rounded-sm bg-bg-raised text-ink-1 border border-border-2 text-[11px]"
                         title={
                           wordMatch?.ground_truth_text &&
-                          wordMatch.ground_truth_text !== wordMatch?.ocr_text
+                          wordMatch.ground_truth_text !== wordMatch.ocr_text
                             ? `GT: ${wordMatch.ground_truth_text}`
                             : undefined
                         }
                       >
-                        {wordMatch?.ocr_text ?? `[${lineMatch.line_index}:${wordIdx}]`}
+                        {wordMatch?.ocr_text ??
+                          `[${String(lineMatch.line_index)}:${String(wordIdx)}]`}
                       </span>
                     );
                   })}

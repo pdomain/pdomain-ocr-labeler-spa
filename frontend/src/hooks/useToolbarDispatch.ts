@@ -111,7 +111,7 @@ export function resolveToolbarRequest(
   // words so enablement and resolvability agree. Words spanning multiple
   // lines stay unresolvable (and those cells are disabled for them anyway).
   const wordLines = new Set(selection.selected_words.map(([li]) => li));
-  const lineFromWords = wordLines.size === 1 ? selection.selected_words[0]![0] : undefined;
+  const lineFromWords = wordLines.size === 1 ? selection.selected_words[0]?.[0] : undefined;
   const firstLine = selection.selected_lines[0] ?? lineFromWords;
   const firstPara = selection.selected_paragraphs[0];
 

@@ -89,7 +89,9 @@ function GroupSection({ group }: { group: HotkeyGroupDef }) {
 export function HotkeyHelpModal() {
   const open = useDialogStore((s) => s.hotkeyHelp.open);
   const groups = useHotkeyGroups();
-  const close = () => dialogStore.close("hotkeyHelp");
+  const close = () => {
+    dialogStore.close("hotkeyHelp");
+  };
 
   // ? key opens help outside inputs (enableOnFormTags: false is default).
   //

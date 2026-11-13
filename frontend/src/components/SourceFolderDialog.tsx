@@ -82,7 +82,9 @@ export function SourceFolderDialog({ open, onClose }: SourceFolderDialogProps) {
         setCurrentPath(root);
         setInputPath(root);
       })
-      .catch(() => {});
+      .catch(() => {
+        // Keep the current root when project discovery is unavailable.
+      });
   }, [open]);
 
   // Fetch directory listing whenever currentPath changes (and dialog is open).
@@ -158,7 +160,7 @@ export function SourceFolderDialog({ open, onClose }: SourceFolderDialogProps) {
       });
       if (!resp.ok) {
         const text = await resp.text();
-        let msg = `Request failed (${resp.status})`;
+        let msg = `Request failed (${String(resp.status)})`;
         try {
           const body = JSON.parse(text) as { message?: string };
           if (body.message) msg = body.message;

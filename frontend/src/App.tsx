@@ -1,3 +1,4 @@
+import { useJobsShellProps } from "./hooks/useJobsShellProps";
 // App.tsx — SPA root: router, QueryClient provider, and route table.
 // Spec: docs/specs/2026-05-12-frontend-shell-design.md §Routing
 // Issue #240
@@ -37,7 +38,7 @@ import HeaderBar from "./components/HeaderBar";
 import { CudaSetupGuidance } from "./components/CudaSetupGuidance";
 import { Rail } from "./components/shell/Rail";
 import { SuiteLauncherProvider, SuiteLauncherHeaderSlot } from "./components/shell/SuiteLauncher";
-import { useJobsShellProps, JobsIndicator } from "./components/shell/JobsSurface";
+import { JobsIndicator } from "./components/shell/JobsSurface";
 import RootPage from "./pages/RootPage";
 import ProjectPage from "./pages/ProjectPage";
 import TypographyWorklistPage from "./pages/TypographyWorklistPage";
@@ -483,7 +484,7 @@ function ThemedToaster() {
 // `persistCommon` and `persistApp` write to localStorage as a stopgap.
 // Full server-side persistence is deferred to Phase 2.5 (reactive stores).
 const UI_PREFS_CONFIG: UIPrefsConfig = {
-  load: async () => {
+  load: () => {
     // Seed theme from localStorage (matches the local ui-prefs.ts logic).
     let theme: "dark" | "light" = "dark";
     try {
@@ -502,9 +503,9 @@ const UI_PREFS_CONFIG: UIPrefsConfig = {
     } catch {
       // localStorage unavailable
     }
-    return { theme, density: "normal", fontScale };
+    return Promise.resolve({ theme, density: "normal", fontScale });
   },
-  persistCommon: async (prefs) => {
+  persistCommon: (prefs) => {
     // GAP-1: no backend — write theme + fontScale to localStorage only.
     try {
       localStorage.setItem("pdl.ui.theme", prefs.theme);
@@ -512,6 +513,7 @@ const UI_PREFS_CONFIG: UIPrefsConfig = {
     } catch {
       // ignore
     }
+    return Promise.resolve();
   },
   persistApp: async (_appPrefs) => {
     // GAP-2: no backend — no-op until Phase 2.5.

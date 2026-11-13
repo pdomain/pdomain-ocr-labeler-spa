@@ -307,3 +307,22 @@ describe("ApiClient", () => {
     });
   });
 });
+
+describe("malformed API error bodies", () => {
+  it.each([null, [], { error: 42, message: {} }])("uses HTTP fallbacks for %j", async (body) => {
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValue(
+        new Response(JSON.stringify(body), { status: 400, statusText: "Bad Request" }),
+      );
+    try {
+      const client = new ApiClient("http://localhost");
+      await expect(client.get("/bad")).rejects.toMatchObject({
+        error: "http_400",
+        message: "Bad Request",
+      });
+    } finally {
+      fetchMock.mockRestore();
+    }
+  });
+});

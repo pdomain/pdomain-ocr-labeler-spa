@@ -348,7 +348,7 @@ function renderOpRect(op: EraseOp, index: number, colors: { fill: string; stroke
     return (
       <Rect
         key={index}
-        data-testid={`erase-overlay-op-${index}`}
+        data-testid={`erase-overlay-op-${String(index)}`}
         x={op.x - r}
         y={op.y - r}
         width={r * 2}
@@ -364,7 +364,7 @@ function renderOpRect(op: EraseOp, index: number, colors: { fill: string; stroke
     return (
       <Rect
         key={index}
-        data-testid={`erase-overlay-op-${index}`}
+        data-testid={`erase-overlay-op-${String(index)}`}
         x={op.x}
         y={op.y}
         width={op.width}
@@ -385,7 +385,7 @@ function renderOpRect(op: EraseOp, index: number, colors: { fill: string; stroke
   return (
     <Rect
       key={index}
-      data-testid={`erase-overlay-op-${index}`}
+      data-testid={`erase-overlay-op-${String(index)}`}
       x={minX}
       y={minY}
       width={maxX - minX}
@@ -399,12 +399,3 @@ function renderOpRect(op: EraseOp, index: number, colors: { fill: string; stroke
 }
 
 /** Human-readable summary for the ops list display. */
-export function describeOp(op: EraseOp, index: number): string {
-  if (op.tool === "brush") {
-    return `Op ${index + 1}: brush at (${Math.round(op.x)},${Math.round(op.y)}) r=${op.radius}`;
-  }
-  if (op.tool === "rect") {
-    return `Op ${index + 1}: rect at (${Math.round(op.x)},${Math.round(op.y)}) ${Math.round(op.width)}×${Math.round(op.height)}`;
-  }
-  return `Op ${index + 1}: lasso (${op.points.length} pts)`;
-}

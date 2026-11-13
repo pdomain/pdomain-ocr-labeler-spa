@@ -1,3 +1,4 @@
+import { lineMatchesFilter } from "../lib/lineMatchesFilter";
 // WordMatchView.test.tsx — unit tests for the virtualised word-match list.
 //
 // Spec: docs/specs/2026-05-12-word-matches-design.md
@@ -14,7 +15,7 @@ import { describe, it, expect, vi } from "vitest";
 import { render, screen, fireEvent } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { components } from "../api/types";
-import { WordMatchView, lineMatchesFilter } from "./WordMatchView";
+import { WordMatchView } from "./WordMatchView";
 import { LineCard } from "./LineCard";
 
 type LineMatch = components["schemas"]["LineMatch"];

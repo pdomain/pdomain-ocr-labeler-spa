@@ -108,7 +108,7 @@ export function expandSelection(page: PagePayload): ExpandedSelection {
   // appear on any LineMatch).
   const knownParagraphs = new Set<number>();
   for (const line of lineMatches) {
-    if (line.paragraph_index !== null && line.paragraph_index !== undefined) {
+    if (typeof line.paragraph_index === "number") {
       knownParagraphs.add(line.paragraph_index);
     }
   }
@@ -118,19 +118,19 @@ export function expandSelection(page: PagePayload): ExpandedSelection {
     const line = linesByIndex.get(lineIdx);
     if (!line) {
       console.warn(
-        `[selection-expand] word (line=${lineIdx}, word=${wordIdx}) skipped: line_index ${lineIdx} not found in line_matches`,
+        `[selection-expand] word (line=${String(lineIdx)}, word=${String(wordIdx)}) skipped: line_index ${String(lineIdx)} not found in line_matches`,
       );
       continue;
     }
     const word = line.word_matches.find((w) => w.word_index === wordIdx);
     if (!word) {
       console.warn(
-        `[selection-expand] word (line=${lineIdx}, word=${wordIdx}) skipped: word_index ${wordIdx} not found in line`,
+        `[selection-expand] word (line=${String(lineIdx)}, word=${String(wordIdx)}) skipped: word_index ${String(wordIdx)} not found in line`,
       );
       continue;
     }
     result.words.push({
-      id: `${lineIdx}-${wordIdx}`,
+      id: `${String(lineIdx)}-${String(wordIdx)}`,
       bbox: word.bbox,
     });
   }
@@ -140,7 +140,7 @@ export function expandSelection(page: PagePayload): ExpandedSelection {
     const line = linesByIndex.get(lineIdx);
     if (!line) {
       console.warn(
-        `[selection-expand] line index ${lineIdx} out of range (page has ${lineMatches.length} lines)`,
+        `[selection-expand] line index ${String(lineIdx)} out of range (page has ${String(lineMatches.length)} lines)`,
       );
       continue;
     }
@@ -158,7 +158,7 @@ export function expandSelection(page: PagePayload): ExpandedSelection {
   for (const paragraphIdx of selection.selected_paragraphs ?? []) {
     if (!knownParagraphs.has(paragraphIdx)) {
       console.warn(
-        `[selection-expand] paragraph index ${paragraphIdx} out of range (page has paragraphs [${[
+        `[selection-expand] paragraph index ${String(paragraphIdx)} out of range (page has paragraphs [${[
           ...knownParagraphs,
         ]
           .sort((a, b) => a - b)

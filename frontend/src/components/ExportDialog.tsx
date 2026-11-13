@@ -1,3 +1,4 @@
+import { optionalNumber, optionalString, readField } from "../lib/runtimeValues";
 // ExportDialog.tsx — Export dialog for DocTR training data export (#227)
 // Spec: docs/specs/2026-05-12-export-design.md
 //
@@ -137,7 +138,9 @@ export function ExportDialog({
     if (!open) return;
     fetchTrainerInstalled()
       .then(setTrainerInstalled)
-      .catch(() => setTrainerInstalled(false));
+      .catch(() => {
+        setTrainerInstalled(false);
+      });
   }, [open]);
 
   // Fetch available styles when scope=all_validated and dialog is open.
@@ -201,7 +204,7 @@ export function ExportDialog({
           id: progress.id,
           scope,
           styleFilters: selectedStyles,
-          pagesExported: progress.progress?.total ?? 0,
+          pagesExported: optionalNumber(readField(progress.progress, "total")) ?? 0,
           timestamp: new Date().toLocaleTimeString(),
           wordsDetection: numberResultField(progress.result, "words_exported_detection"),
           wordsRecognition: numberResultField(progress.result, "words_exported_recognition"),
@@ -256,13 +259,17 @@ export function ExportDialog({
 
       if (!resp.ok) {
         const text = await resp.text();
-        setError(`Export failed (${resp.status}): ${text}`);
+        setError(`Export failed (${String(resp.status)}): ${text}`);
         setRunning(false);
         return;
       }
 
-      const data: { job_id: string } = await resp.json();
-      setJobId(data.job_id);
+      const data: unknown = await resp.json();
+      const nextJobId = optionalString(readField(data, "job_id"));
+      if (nextJobId === undefined || nextJobId.length === 0) {
+        throw new Error("Export response did not include a job ID");
+      }
+      setJobId(nextJobId);
     } catch (e) {
       setError(String(e));
       setRunning(false);
@@ -282,7 +289,7 @@ export function ExportDialog({
   // --- Derived UI strings ---
   const progressMsg =
     progress && running
-      ? `Exporting page ${progress.progress?.current ?? 0} of ${progress.progress?.total ?? "?"}`
+      ? `Exporting page ${String(optionalNumber(readField(progress.progress, "current")) ?? 0)} of ${String(optionalNumber(readField(progress.progress, "total")) ?? "?")}`
       : null;
 
   return (

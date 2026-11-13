@@ -588,8 +588,9 @@ function groupByPara(lines: LineMatch[]): Map<number | null, LineMatch[]> {
   const groups = new Map<number | null, LineMatch[]>();
   for (const line of lines) {
     const key = line.paragraph_index;
-    if (!groups.has(key)) groups.set(key, []);
-    groups.get(key)!.push(line);
+    const group = groups.get(key) ?? [];
+    group.push(line);
+    groups.set(key, group);
   }
   return groups;
 }
@@ -901,14 +902,14 @@ function BlockDetailInner({ page, level, paraId, projectId, pageIndex }: BlockDe
                 >
                   <button
                     type="button"
-                    data-testid={`block-detail-para-scope-${pId ?? "null"}`}
+                    data-testid={`block-detail-para-scope-${String(pId ?? "null")}`}
                     onClick={() => {
                       selectPara(pageIndex, pId);
                     }}
                     className="w-full flex items-center justify-between px-3 py-1.5 text-left bg-bg-raised hover:bg-bg-raised/80 transition-colors"
                   >
                     <span className="text-[11px] font-medium text-ink-1">
-                      {pId === null ? "Unsorted Para" : `Para ${pId + 1}`}
+                      {pId === null ? "Unsorted Para" : `Para ${String(pId + 1)}`}
                     </span>
                     <span className="text-[10px] text-ink-4">{pLines.length} lines</span>
                   </button>
@@ -975,7 +976,7 @@ function ParaGroup({ paraId, lines, pageIndex }: ParaGroupProps) {
     <div className="border-b border-border-1/50">
       <button
         type="button"
-        data-testid={`block-detail-para-${paraId ?? "null"}`}
+        data-testid={`block-detail-para-${String(paraId ?? "null")}`}
         onClick={() => {
           selectPara(pageIndex, paraId);
         }}
@@ -983,7 +984,7 @@ function ParaGroup({ paraId, lines, pageIndex }: ParaGroupProps) {
       >
         <span className="text-ink-4">¶</span>
         <span>
-          {paraId === null ? "No paragraph" : `Para ${paraId + 1}`}{" "}
+          {paraId === null ? "No paragraph" : `Para ${String(paraId + 1)}`}{" "}
           <span className="text-ink-4">({lines.length} lines)</span>
         </span>
       </button>
@@ -1000,7 +1001,7 @@ function LineItemCard({ line, pageIndex }: { line: LineMatch; pageIndex: number 
   return (
     <button
       type="button"
-      data-testid={`block-detail-line-card-${line.line_index}`}
+      data-testid={`block-detail-line-card-${String(line.line_index)}`}
       onClick={() => {
         selectLine(pageIndex, line.line_index);
       }}
@@ -1008,7 +1009,7 @@ function LineItemCard({ line, pageIndex }: { line: LineMatch; pageIndex: number 
     >
       <StatusPip status={statusPip(line.overall_match_status)} />
       <span className="flex-1 truncate text-[11px] font-mono text-ink-1">
-        {line.ocr_line_text || `Line ${line.line_index + 1}`}
+        {line.ocr_line_text || `Line ${String(line.line_index + 1)}`}
       </span>
       <span className="text-[10px] text-ink-4 tabular-nums">{line.line_index + 1}</span>
     </button>

@@ -1,3 +1,4 @@
+import { LAYER_COLORS } from "../layerColors";
 // Rail.tsx — 64px vertical left rail: target (B/L/W/P) + mode (V/R/A/E) selectors.
 // Spec: docs/specs/2026-05-15-hifi-redesign-plan.md Slice 10.
 // Hi-fi gaps P1.d (Gaps 10,11,12), P1.e (Gaps 11,13,15), P1.f (Gap 14).
@@ -31,7 +32,7 @@ import {
   REVIEW_QUEUE_KIND_LABELS,
   type ReviewQueueKindName,
 } from "../../hooks/useBookReviewQueue";
-import { LAYER_COLORS } from "../BBoxOverlay";
+
 import { dialogStore } from "../../stores/dialog-store";
 import { useUiPrefs, type LayerVisibility } from "../../stores/ui-prefs";
 import { cn } from "@/lib/utils";

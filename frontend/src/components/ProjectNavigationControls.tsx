@@ -1,3 +1,4 @@
+import { arrayLength } from "../lib/runtimeValues";
 // ProjectNavigationControls.tsx — inline pager bar for the project header.
 //
 // Spec: specs/22-page-surface-wireup.md §7 (Navigation controls).
@@ -68,7 +69,7 @@ const ProjectNavigationControls = forwardRef<
   // image_paths.length is the source of truth for page count
   // (spec 23 §2; Project also has a total_pages field but image_paths
   // is what the legacy labeler uses for nav bounds).
-  const totalPages = data?.image_paths?.length ?? 0;
+  const totalPages = arrayLength(data?.image_paths) ?? 0;
 
   const [gotoValue, setGotoValue] = useState<string>("");
 
@@ -194,7 +195,7 @@ export default ProjectNavigationControls;
  */
 function parsePositiveInt(value: string | undefined | null): number | null {
   if (value === undefined || value === null) return null;
-  const trimmed = String(value).trim();
+  const trimmed = value.trim();
   if (trimmed === "") return null;
   if (!/^\d+$/.test(trimmed)) return null;
   const n = parseInt(trimmed, 10);

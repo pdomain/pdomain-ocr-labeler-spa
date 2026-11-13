@@ -70,7 +70,7 @@ export function BulkGlyphMarkDialog({
       }),
     });
     if (!resp.ok) {
-      throw new Error(`Bulk mark failed: ${resp.status}`);
+      throw new Error(`Bulk mark failed: ${String(resp.status)}`);
     }
     return resp.json() as Promise<{
       affected_word_ids: string[];

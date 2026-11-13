@@ -1,3 +1,4 @@
+import { optionalString } from "../../lib/runtimeValues";
 // Worklist.tsx — Worklist tab inside the Drawer panel.
 // Spec: docs/specs/2026-05-15-hifi-redesign-plan.md Slice 11, P5.a, P5.b.
 // Phase 2.3: internals replaced with pdomain-ui <WordList>; labeler-specific
@@ -54,7 +55,7 @@ interface LineMatchWordItem extends WordListItem {
 function adaptLineMatch(line: LineMatch): LineMatchWordItem {
   return {
     // WordListItem required fields (GAP-1 shim)
-    text: line.ocr_line_text ?? "",
+    text: optionalString(line.ocr_line_text) ?? "",
     bounding_box: { top_left: { x: 0, y: 0 }, bottom_right: { x: 0, y: 0 } },
     // passthrough for renderRow
     _lineMatch: line,
@@ -99,7 +100,7 @@ const SORT_OPTIONS: { value: WorklistSort; label: string }[] = [
   { value: "status", label: "By status" },
 ];
 
-const STATUS_SORT_ORDER: Record<MatchStatus, number> = {
+const STATUS_SORT_ORDER: Partial<Record<MatchStatus, number>> = {
   mismatch: 0,
   fuzzy: 1,
   unmatched_gt: 2,
@@ -112,7 +113,7 @@ function sortLines(lines: LineMatch[], sort: WorklistSort): LineMatch[] {
   const copy = [...lines];
   if (sort === "confidence") {
     copy.sort((a, b) => confidencePct(a) - confidencePct(b));
-  } else if (sort === "status") {
+  } else {
     copy.sort(
       (a, b) =>
         (STATUS_SORT_ORDER[a.overall_match_status] ?? 99) -
@@ -267,8 +268,8 @@ function WorklistRowInner({ item, isSelected, isChecked }: WorklistRowInnerProps
   const pip = pipStatus(line.overall_match_status);
   const barClass = STATUS_BAR_CLASS[pip];
   const pct = confidencePct(line);
-  const ocr = line.ocr_line_text ?? "";
-  const gt = line.ground_truth_line_text ?? "";
+  const ocr = optionalString(line.ocr_line_text) ?? "";
+  const gt = optionalString(line.ground_truth_line_text) ?? "";
   const diffVisible = hasDiff(ocr, gt);
   const lineNum = line.line_index + 1;
   const idStamp = `L-${String(lineNum).padStart(3, "0")}`;
@@ -277,7 +278,7 @@ function WorklistRowInner({ item, isSelected, isChecked }: WorklistRowInnerProps
     // Note: pdomain-ui WordList renders the outer div[role=option] wrapping this.
     // We render only the inner content here.
     <div
-      data-testid={`worklist-row-${line.line_index}`}
+      data-testid={`worklist-row-${String(line.line_index)}`}
       data-selected={isSelected ? "true" : undefined}
       aria-selected={isSelected}
       className={cn(
@@ -291,7 +292,7 @@ function WorklistRowInner({ item, isSelected, isChecked }: WorklistRowInnerProps
       <div className="flex items-center pl-1.5 pr-0.5 shrink-0">
         <input
           type="checkbox"
-          data-testid={`worklist-row-checkbox-${line.line_index}`}
+          data-testid={`worklist-row-checkbox-${String(line.line_index)}`}
           checked={isChecked}
           onChange={() => {
             worklistStore.toggle(line.line_index);
@@ -301,7 +302,7 @@ function WorklistRowInner({ item, isSelected, isChecked }: WorklistRowInnerProps
             e.stopPropagation();
           }}
           className="w-3 h-3 cursor-pointer accent-accent"
-          aria-label={`Select line ${line.line_index + 1} for bulk action`}
+          aria-label={`Select line ${String(line.line_index + 1)} for bulk action`}
         />
       </div>
 
@@ -327,7 +328,7 @@ function WorklistRowInner({ item, isSelected, isChecked }: WorklistRowInnerProps
         {/* GT diff line — only shown when OCR ≠ GT */}
         {diffVisible && (
           <span
-            data-testid={`worklist-row-${line.line_index}-gt`}
+            data-testid={`worklist-row-${String(line.line_index)}-gt`}
             className="truncate font-mono text-[10px] text-status-fuzzy"
           >
             → {gt}
@@ -345,8 +346,8 @@ function filterBySearch(lines: LineMatch[], query: string): LineMatch[] {
   if (!q) return lines;
   return lines.filter(
     (l) =>
-      (l.ocr_line_text ?? "").toLowerCase().includes(q) ||
-      (l.ground_truth_line_text ?? "").toLowerCase().includes(q),
+      (optionalString(l.ocr_line_text) ?? "").toLowerCase().includes(q) ||
+      (optionalString(l.ground_truth_line_text) ?? "").toLowerCase().includes(q),
   );
 }
 

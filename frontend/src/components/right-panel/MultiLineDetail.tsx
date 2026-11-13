@@ -1,3 +1,4 @@
+import { optionalNumber, optionalString } from "../../lib/runtimeValues";
 // MultiLineDetail.tsx — ML-2 through ML-8: multi-line selection right-panel view.
 // Spec: docs/specs/2026-06-10-multi-line-detail.md
 //
@@ -104,7 +105,7 @@ export function MultiLineDetail({
   function handleBulkDelete() {
     dialogStore.openConfirm({
       title: "Delete lines?",
-      body: `This will permanently remove ${sortedLineIds.length} selected lines. This action cannot be undone.`,
+      body: `This will permanently remove ${String(sortedLineIds.length)} selected lines. This action cannot be undone.`,
       onConfirm: () => {
         for (const lineId of sortedLineIds) {
           deleteLineMut.mutate({ lineIndex: lineId });
@@ -204,15 +205,11 @@ function LineCard({ line, projectId, pageIndex, allInputsRef }: LineCardProps) {
   const copyLineGt = useCopyLineGt(projectId, pageIndex);
   const deleteLineMut = useDeleteLine(projectId, pageIndex);
 
-  const validatedCount = line.validated_word_count ?? 0;
-  const totalCount = line.total_word_count ?? line.word_matches.length;
+  const validatedCount = optionalNumber(line.validated_word_count) ?? 0;
+  const totalCount = optionalNumber(line.total_word_count) ?? line.word_matches.length;
   const lineNum = line.line_index + 1;
-  const paraNum =
-    line.paragraph_index !== null && line.paragraph_index !== undefined
-      ? line.paragraph_index + 1
-      : null;
-  const blockNum =
-    line.block_index !== null && line.block_index !== undefined ? line.block_index : null;
+  const paraNum = typeof line.paragraph_index === "number" ? line.paragraph_index + 1 : null;
+  const blockNum = line.block_index ?? null;
 
   function handleDelete() {
     dialogStore.openConfirm({
@@ -230,7 +227,7 @@ function LineCard({ line, projectId, pageIndex, allInputsRef }: LineCardProps) {
 
   return (
     <div
-      data-testid={`multi-line-card-${line.line_index}`}
+      data-testid={`multi-line-card-${String(line.line_index)}`}
       data-line-index={line.line_index}
       className="flex flex-col border border-border-1 rounded-sm bg-bg-raised/30"
     >
@@ -253,7 +250,7 @@ function LineCard({ line, projectId, pageIndex, allInputsRef }: LineCardProps) {
         <div className="flex items-center gap-1 shrink-0">
           <button
             type="button"
-            data-testid={`line-validate-button-${line.line_index}`}
+            data-testid={`line-validate-button-${String(line.line_index)}`}
             title="Validate all words in this line"
             disabled={isPending || line.is_fully_validated}
             onClick={() => {
@@ -265,7 +262,7 @@ function LineCard({ line, projectId, pageIndex, allInputsRef }: LineCardProps) {
           </button>
           <button
             type="button"
-            data-testid={`line-gt-to-ocr-button-${line.line_index}`}
+            data-testid={`line-gt-to-ocr-button-${String(line.line_index)}`}
             title="Copy GT → OCR for this line"
             disabled={isPending}
             onClick={() => {
@@ -277,7 +274,7 @@ function LineCard({ line, projectId, pageIndex, allInputsRef }: LineCardProps) {
           </button>
           <button
             type="button"
-            data-testid={`line-ocr-to-gt-button-${line.line_index}`}
+            data-testid={`line-ocr-to-gt-button-${String(line.line_index)}`}
             title="Copy OCR → GT for this line"
             disabled={isPending}
             onClick={() => {
@@ -289,7 +286,7 @@ function LineCard({ line, projectId, pageIndex, allInputsRef }: LineCardProps) {
           </button>
           <button
             type="button"
-            data-testid={`line-delete-button-${line.line_index}`}
+            data-testid={`line-delete-button-${String(line.line_index)}`}
             title="Delete this line"
             disabled={isPending}
             onClick={handleDelete}
@@ -339,7 +336,7 @@ function WordRow({ word, lineIndex, projectId, pageIndex, allInputsRef }: WordRo
   const updateGt = useUpdateWordGt(projectId, pageIndex);
   const validateWords = useValidateWords(projectId, pageIndex);
 
-  const [gtText, setGtText] = useState(word.ground_truth_text ?? "");
+  const [gtText, setGtText] = useState(optionalString(word.ground_truth_text) ?? "");
   const pip = pipStatus(word.match_status);
   // ML-5: ref for this input — registered in allInputsRef on mount.
   const inputRef = useRef<HTMLInputElement>(null);
@@ -350,8 +347,8 @@ function WordRow({ word, lineIndex, projectId, pageIndex, allInputsRef }: WordRo
   // `gtText` differs from it (the user is expected to diverge from the
   // server value while editing).
   // https://react.dev/learn/you-might-not-need-an-effect#adjusting-some-state-when-a-prop-changes
-  const [prevServerGt, setPrevServerGt] = useState(word.ground_truth_text ?? "");
-  const serverGt = word.ground_truth_text ?? "";
+  const [prevServerGt, setPrevServerGt] = useState(optionalString(word.ground_truth_text) ?? "");
+  const serverGt = optionalString(word.ground_truth_text) ?? "";
   if (serverGt !== prevServerGt) {
     setPrevServerGt(serverGt);
     setGtText(serverGt);
@@ -361,20 +358,18 @@ function WordRow({ word, lineIndex, projectId, pageIndex, allInputsRef }: WordRo
   useEffect(() => {
     const el = inputRef.current;
     const list = allInputsRef.current;
-    if (!el || !list) return;
+    if (!el) return;
     // Append to the flat list (render order = DOM order since cards are sorted ascending).
     list.push(el);
     return () => {
-      const list2 = allInputsRef.current;
-      if (!list2) return;
-      const idx = list2.indexOf(el);
-      if (idx !== -1) list2.splice(idx, 1);
+      const idx = list.indexOf(el);
+      if (idx !== -1) list.splice(idx, 1);
     };
   }, [allInputsRef]);
 
   const commit = useCallback(() => {
     const trimmed = gtText.trim();
-    const original = (word.ground_truth_text ?? "").trim();
+    const original = (optionalString(word.ground_truth_text) ?? "").trim();
     if (trimmed !== original && word.word_index !== null) {
       updateGt.mutate({ lineIndex, wordIndex: word.word_index, text: trimmed });
     }
@@ -388,13 +383,12 @@ function WordRow({ word, lineIndex, projectId, pageIndex, allInputsRef }: WordRo
       return;
     }
     if (e.key === "Escape") {
-      setGtText(word.ground_truth_text ?? "");
+      setGtText(optionalString(word.ground_truth_text) ?? "");
       return;
     }
     // ML-5: intercept Tab/Shift-Tab to traverse across card boundaries.
     if (e.key === "Tab") {
       const inputs = allInputsRef.current;
-      if (!inputs) return;
       const current = e.currentTarget;
       const idx = inputs.indexOf(current);
       if (idx === -1) return;
@@ -408,24 +402,24 @@ function WordRow({ word, lineIndex, projectId, pageIndex, allInputsRef }: WordRo
 
   return (
     <div
-      data-testid={`word-image-cell-${lineIndex}-${wordIdx}`}
+      data-testid={`word-image-cell-${String(lineIndex)}-${String(wordIdx)}`}
       className="flex items-center gap-2 py-0.5"
     >
       {/* Status + OCR label */}
       <StatusPip status={pip} />
       <span
-        data-testid={`ocr-text-label-${lineIndex}-${wordIdx}`}
+        data-testid={`ocr-text-label-${String(lineIndex)}-${String(wordIdx)}`}
         className="text-[10px] font-mono text-ink-3 w-16 truncate shrink-0"
-        title={word.ocr_text ?? ""}
+        title={optionalString(word.ocr_text) ?? ""}
       >
-        {word.ocr_text || <span className="italic">∅</span>}
+        {(optionalString(word.ocr_text) ?? "") || <span className="italic">∅</span>}
       </span>
 
       {/* GT input (ML-4) */}
       <input
         ref={inputRef}
         type="text"
-        data-testid={`gt-text-input-${lineIndex}-${wordIdx}`}
+        data-testid={`gt-text-input-${String(lineIndex)}-${String(wordIdx)}`}
         value={gtText}
         onChange={(e) => {
           setGtText(e.target.value);
@@ -433,13 +427,13 @@ function WordRow({ word, lineIndex, projectId, pageIndex, allInputsRef }: WordRo
         onBlur={commit}
         onKeyDown={handleKeyDown}
         className="flex-1 min-w-0 text-[11px] font-mono bg-bg-surface border border-border-2 rounded-sm px-1.5 py-0.5 text-ink-1 focus:outline-hidden focus:border-accent transition-colors"
-        aria-label={`GT for word ${wordIdx + 1} in line ${lineIndex + 1}`}
+        aria-label={`GT for word ${String(wordIdx + 1)} in line ${String(lineIndex + 1)}`}
       />
 
       {/* Validate button */}
       <button
         type="button"
-        data-testid={`word-validate-button-${lineIndex}-${wordIdx}`}
+        data-testid={`word-validate-button-${String(lineIndex)}-${String(wordIdx)}`}
         title={word.is_validated ? "Word validated" : "Validate this word"}
         disabled={validateWords.isPending}
         onClick={() => {

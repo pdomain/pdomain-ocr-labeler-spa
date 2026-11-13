@@ -69,7 +69,7 @@ export function ReboxSection({ word, projectId, pageIndex, imageUrl }: ReboxSect
   // last-seen identity key, so the reseed fires exactly once per identity
   // change (not on every render).
   // https://react.dev/learn/you-might-not-need-an-effect#adjusting-some-state-when-a-prop-changes
-  const wordKey = `${word.line_index}-${word.word_index ?? 0}`;
+  const wordKey = `${String(word.line_index)}-${String(word.word_index ?? 0)}`;
   const [prevWordKey, setPrevWordKey] = useState(wordKey);
   if (wordKey !== prevWordKey) {
     setPrevWordKey(wordKey);
@@ -79,7 +79,7 @@ export function ReboxSection({ word, projectId, pageIndex, imageUrl }: ReboxSect
   }
 
   const dirty = !bboxEqual(roundBbox(draft), roundBbox(word.bbox));
-  const summary = `${roundBbox(draft).width} × ${roundBbox(draft).height} px`;
+  const summary = `${String(roundBbox(draft).width)} × ${String(roundBbox(draft).height)} px`;
 
   const handleApply = useCallback(() => {
     const final = roundBbox(draft);

@@ -196,7 +196,7 @@ export function BBoxSection({ word, projectId, pageIndex, refineTracking }: BBox
   const [focusedRaw, setFocusedRaw] = useState<string | null>(null);
 
   // Track word identity for potential future key-based reset.
-  const wordKey = `${word.line_index}-${word.word_index ?? 0}`;
+  const wordKey = `${String(word.line_index)}-${String(word.word_index ?? 0)}`;
 
   // Review round 3, finding 2: BBoxSection has no `key` tied to word
   // identity (WordDetail reuses the same instance across a selection

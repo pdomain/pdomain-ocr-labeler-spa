@@ -1,3 +1,4 @@
+import { nonEmptyString, optionalString, readField } from "../lib/runtimeValues";
 // PageActionsCompact.tsx — compact header action buttons for the header slot.
 //
 // IS-2: Lives in HeaderBar's actionsSlot when on a project route.
@@ -356,7 +357,7 @@ export function PageActionsCompact({ projectId, pageIndex }: PageActionsCompactP
       toast.warn(`Cancel requested (${BEST_EFFORT_CANCEL_NOTE}).`, { id: jobId });
     },
     onRunning: (jobId, event) => {
-      const msg = event.progress?.message ?? "Running OCR…";
+      const msg = optionalString(readField(event.progress, "message")) ?? "Running OCR…";
       showCancellableLoadingToast(jobId, msg, cancelJob, `Cancel is ${BEST_EFFORT_CANCEL_NOTE}.`);
     },
   });
@@ -380,7 +381,7 @@ export function PageActionsCompact({ projectId, pageIndex }: PageActionsCompactP
           if (skipped > 0) {
             const indices = job.result?.skipped_indices ?? [];
             toast.warn(
-              `Project saved. ${skipped} page(s) not saved (unregistered): ${indices.join(", ")}`,
+              `Project saved. ${String(skipped)} page(s) not saved (unregistered): ${indices.join(", ")}`,
               {
                 id: jobId,
               },
@@ -403,11 +404,11 @@ export function PageActionsCompact({ projectId, pageIndex }: PageActionsCompactP
     // (save_project.py), so the page query is worth refreshing here.
     onCancelled: (jobId, event) => {
       void qc.invalidateQueries({ queryKey: ["page", projectId, pageIndex] });
-      const msg = event.progress.message || "Save project cancelled";
+      const msg = nonEmptyString(readField(event.progress, "message")) ?? "Save project cancelled";
       toast.warn(msg, { id: jobId });
     },
     onRunning: (jobId, event) => {
-      const msg = event.progress?.message ?? "Saving project…";
+      const msg = optionalString(readField(event.progress, "message")) ?? "Saving project…";
       showCancellableLoadingToast(jobId, msg, cancelJob);
     },
   });
@@ -432,11 +433,11 @@ export function PageActionsCompact({ projectId, pageIndex }: PageActionsCompactP
     // pages, not mid-page), so the page query is worth refreshing here.
     onCancelled: (jobId, event) => {
       void qc.invalidateQueries({ queryKey: ["page", projectId, pageIndex] });
-      const msg = event.progress.message || "Rotate cancelled";
+      const msg = nonEmptyString(readField(event.progress, "message")) ?? "Rotate cancelled";
       toast.warn(msg, { id: jobId });
     },
     onRunning: (jobId, event) => {
-      const msg = event.progress?.message ?? "Rotating…";
+      const msg = optionalString(readField(event.progress, "message")) ?? "Rotating…";
       if (rotateJobType === "auto_rotate_all") {
         showCancellableLoadingToast(jobId, msg, cancelJob);
       } else {
@@ -473,7 +474,8 @@ export function PageActionsCompact({ projectId, pageIndex }: PageActionsCompactP
       // refresh the list"): the book-wide Review page kinds dialog must see
       // this run's fresh proposals too.
       void qc.invalidateQueries({ queryKey: ["page-kinds", projectId] });
-      const msg = event.progress.message || "Page kind proposals complete";
+      const msg =
+        nonEmptyString(readField(event.progress, "message")) ?? "Page kind proposals complete";
       toast.success(msg, { id: jobId });
     },
     onError: (jobId) => {
@@ -485,13 +487,14 @@ export function PageActionsCompact({ projectId, pageIndex }: PageActionsCompactP
     // invalidate; the backend's own message says as much ("nothing
     // recorded").
     onCancelled: (jobId, event) => {
-      const msg = event.progress.message || "Page kind proposals cancelled";
+      const msg =
+        nonEmptyString(readField(event.progress, "message")) ?? "Page kind proposals cancelled";
       toast.warn(msg, { id: jobId });
     },
     onRunning: (jobId, event) => {
       // The normalized message is "" when the backend sent none, so fall back
       // with ||, not ??, or the loading toast would go blank.
-      const msg = event.progress.message || "Proposing page kinds…";
+      const msg = nonEmptyString(readField(event.progress, "message")) ?? "Proposing page kinds…";
       showCancellableLoadingToast(jobId, msg, cancelJob);
     },
   });
@@ -512,7 +515,8 @@ export function PageActionsCompact({ projectId, pageIndex }: PageActionsCompactP
       // summary once this invalidation's refetch lands.
       void qc.invalidateQueries({ queryKey: ["review-queue", projectId] });
       invalidateBookReviewQueue(qc, projectId);
-      const msg = event.progress.message || "Region proposals complete";
+      const msg =
+        nonEmptyString(readField(event.progress, "message")) ?? "Region proposals complete";
       if (msg.toLowerCase().includes("propose page kinds first")) {
         toast.warn(msg, { id: jobId });
       } else {
@@ -530,11 +534,12 @@ export function PageActionsCompact({ projectId, pageIndex }: PageActionsCompactP
       void qc.invalidateQueries({ queryKey: ["page", projectId, pageIndex] });
       void qc.invalidateQueries({ queryKey: ["review-queue", projectId] });
       invalidateBookReviewQueue(qc, projectId);
-      const msg = event.progress.message || "Region proposals cancelled";
+      const msg =
+        nonEmptyString(readField(event.progress, "message")) ?? "Region proposals cancelled";
       toast.warn(msg, { id: jobId });
     },
     onRunning: (jobId, event) => {
-      const msg = event.progress.message || "Proposing regions…";
+      const msg = nonEmptyString(readField(event.progress, "message")) ?? "Proposing regions…";
       showCancellableLoadingToast(jobId, msg, cancelJob);
     },
   });
@@ -602,7 +607,7 @@ export function PageActionsCompact({ projectId, pageIndex }: PageActionsCompactP
       onConfirm: () => {
         reloadOcr.mutate(undefined, {
           onSuccess: (data) => {
-            if (data?.job_id) {
+            if (optionalString(readField(data, "job_id"))) {
               setActiveJobId(data.job_id);
               // Show initial loading toast immediately while SSE stream opens.
               showCancellableLoadingToast(
@@ -663,7 +668,7 @@ export function PageActionsCompact({ projectId, pageIndex }: PageActionsCompactP
       onConfirm: () => {
         reloadOcrEdited.mutate(undefined, {
           onSuccess: (data) => {
-            if (data?.job_id) {
+            if (optionalString(readField(data, "job_id"))) {
               setActiveJobId(data.job_id);
               showCancellableLoadingToast(
                 data.job_id,
@@ -686,7 +691,7 @@ export function PageActionsCompact({ projectId, pageIndex }: PageActionsCompactP
   function handleSaveProject() {
     saveProject.mutate(undefined, {
       onSuccess: (data) => {
-        if (data?.job_id) {
+        if (optionalString(readField(data, "job_id"))) {
           setSaveProjectJobId(data.job_id);
           showCancellableLoadingToast(data.job_id, "Saving project…", cancelJob);
         } else {
@@ -729,7 +734,7 @@ export function PageActionsCompact({ projectId, pageIndex }: PageActionsCompactP
       { degrees },
       {
         onSuccess: (data) => {
-          if (data?.job_id) {
+          if (optionalString(readField(data, "job_id"))) {
             setRotateJobId(data.job_id);
             setRotateJobType("rotate_page");
             void import("sonner").then(({ toast: sonnerToast }) => {
@@ -752,7 +757,7 @@ export function PageActionsCompact({ projectId, pageIndex }: PageActionsCompactP
   function handleAutoRotateAll() {
     autoRotateAll.mutate(undefined, {
       onSuccess: (data) => {
-        if (data?.job_id) {
+        if (optionalString(readField(data, "job_id"))) {
           setRotateJobId(data.job_id);
           setRotateJobType("auto_rotate_all");
           showCancellableLoadingToast(data.job_id, "Auto-rotating pages…", cancelJob);
@@ -775,7 +780,7 @@ export function PageActionsCompact({ projectId, pageIndex }: PageActionsCompactP
   function handleProposePageKinds() {
     proposePageKinds.mutate(undefined, {
       onSuccess: (data) => {
-        if (data.job_id) {
+        if (optionalString(readField(data, "job_id"))) {
           setPageKindsJobId(data.job_id);
           showCancellableLoadingToast(data.job_id, "Proposing page kinds…", cancelJob);
         }
@@ -789,7 +794,7 @@ export function PageActionsCompact({ projectId, pageIndex }: PageActionsCompactP
   function handleProposeRegions() {
     proposeRegions.mutate(undefined, {
       onSuccess: (data) => {
-        if (data.job_id) {
+        if (optionalString(readField(data, "job_id"))) {
           setRegionsJobId(data.job_id);
           showCancellableLoadingToast(data.job_id, "Proposing regions…", cancelJob);
         }
@@ -1119,7 +1124,9 @@ export function PageActionsCompact({ projectId, pageIndex }: PageActionsCompactP
           data-testid="bulk-glyph-mark-button"
           aria-label="Bulk-mark glyphs"
           disabled={disabled}
-          onClick={() => setBulkGlyphOpen(true)}
+          onClick={() => {
+            setBulkGlyphOpen(true);
+          }}
           title="Bulk-mark glyphs"
           className={`${base} ${normal}`}
         >
@@ -1155,7 +1162,9 @@ export function PageActionsCompact({ projectId, pageIndex }: PageActionsCompactP
             open={bulkGlyphOpen}
             projectId={projectId}
             pageIndex={pageIndex}
-            onClose={() => setBulkGlyphOpen(false)}
+            onClose={() => {
+              setBulkGlyphOpen(false);
+            }}
           />
         )}
       </ButtonGroup>

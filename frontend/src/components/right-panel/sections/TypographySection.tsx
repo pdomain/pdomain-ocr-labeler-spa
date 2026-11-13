@@ -63,6 +63,7 @@ export function TypographySection({ projectId, pageIndex, wordId }: TypographySe
   if (!wordId) return <p role="alert">Typography needs a stable word ID.</p>;
   if (headQuery.isLoading) return <p>Loading typography…</p>;
   if (!head) return <p role="alert">Typography data is unavailable.</p>;
+  const loadedHead = head;
 
   function select(index: number) {
     if (anchor === null || focus !== null) {
@@ -74,16 +75,17 @@ export function TypographySection({ projectId, pageIndex, wordId }: TypographySe
   }
 
   function replacement(nextSpans: Span[], regular = false) {
+    if (!head) throw new Error("Typography data is unavailable.");
     const positive = new Set(nextSpans.map((span) => span.label));
     return {
-      word_id: head!.word_id,
-      text: head!.text,
-      text_sha256: head!.text_sha256,
-      page_content_sha256: head!.page_sha256,
-      image_artifact_sha256: head!.image_sha256,
-      grapheme_map_version: head!.grapheme_map_version,
-      taxonomy_version: head!.taxonomy.version,
-      taxonomy_hash: head!.taxonomy.taxonomy_hash,
+      word_id: loadedHead.word_id,
+      text: loadedHead.text,
+      text_sha256: loadedHead.text_sha256,
+      page_content_sha256: loadedHead.page_sha256,
+      image_artifact_sha256: loadedHead.image_sha256,
+      grapheme_map_version: loadedHead.grapheme_map_version,
+      taxonomy_version: loadedHead.taxonomy.version,
+      taxonomy_hash: loadedHead.taxonomy.taxonomy_hash,
       label_states: Object.fromEntries(
         taxonomyLabels.map((label) => [label, positive.has(label) ? "positive" : "negative"]),
       ),
@@ -91,7 +93,7 @@ export function TypographySection({ projectId, pageIndex, wordId }: TypographySe
       source_evidence_ids: ["labeler-manual-review"],
       warnings: [],
       whole_word_labels: null,
-      word_revision: head!.word_revision + 1,
+      word_revision: loadedHead.word_revision + 1,
       review_state: regular ? "reviewed_regular" : "reviewed",
       metadata: null,
     } satisfies components["schemas"]["WordTypography-Input"];
@@ -100,19 +102,19 @@ export function TypographySection({ projectId, pageIndex, wordId }: TypographySe
   async function submit(decision: Decision, nextSpans = spans, regular = false) {
     const carriesReplacement = ["approved_edit", "reviewed_regular", "accept"].includes(decision);
     const body: Submission = {
-      expected_head: head!.head_token,
+      expected_head: loadedHead.head_token,
       correction_id: crypto.randomUUID(),
-      taxonomy_version: head!.taxonomy.version,
-      taxonomy_hash: head!.taxonomy.taxonomy_hash,
-      grapheme_map_version: head!.grapheme_map_version,
+      taxonomy_version: loadedHead.taxonomy.version,
+      taxonomy_hash: loadedHead.taxonomy.taxonomy_hash,
+      grapheme_map_version: loadedHead.grapheme_map_version,
       labeler_id: "local",
       decision,
       replacement: carriesReplacement ? replacement(nextSpans, regular) : null,
-      replacement_text_sha256: carriesReplacement ? head!.text_sha256 : null,
-      replacement_page_sha256: carriesReplacement ? head!.page_sha256 : null,
-      replacement_image_sha256: carriesReplacement ? head!.image_sha256 : null,
-      replacement_page_head_sha256: carriesReplacement ? head!.page_head_sha256 : null,
-      replacement_word_revision: carriesReplacement ? head!.word_revision + 1 : null,
+      replacement_text_sha256: carriesReplacement ? loadedHead.text_sha256 : null,
+      replacement_page_sha256: carriesReplacement ? loadedHead.page_sha256 : null,
+      replacement_image_sha256: carriesReplacement ? loadedHead.image_sha256 : null,
+      replacement_page_head_sha256: carriesReplacement ? loadedHead.page_head_sha256 : null,
+      replacement_word_revision: carriesReplacement ? loadedHead.word_revision + 1 : null,
       replacement_artifacts: [],
       replacement_artifact_payloads: [],
       model_runs: [],
@@ -134,7 +136,7 @@ export function TypographySection({ projectId, pageIndex, wordId }: TypographySe
       end: selected.end,
       label_source: "human",
       confidence_tier: "gold",
-      alignment_evidence_id: `manual-${offset}`,
+      alignment_evidence_id: `manual-${String(offset)}`,
       prediction_id: null,
     }));
     setSpans((current) => [...current, ...additions]);
@@ -188,27 +190,29 @@ export function TypographySection({ projectId, pageIndex, wordId }: TypographySe
           <button
             type="button"
             disabled={setTextValidation.isPending}
-            onClick={() =>
+            onClick={() => {
               setTextValidation.mutate({
                 expected_head: textValidation.data.head_token,
                 validated: !textValidation.data.validated,
-              })
-            }
+              });
+            }}
           >
             {textValidation.data.validated ? "Unvalidate text" : "Validate exact text"}
           </button>
         </div>
       )}
       <div className="flex flex-wrap gap-1" aria-label="Graphemes">
-        {head.graphemes.map((grapheme, index) => (
+        {loadedHead.graphemes.map((grapheme, index) => (
           <button
             key={index}
             type="button"
-            data-testid={`typography-grapheme-${index}`}
+            data-testid={`typography-grapheme-${String(index)}`}
             aria-pressed={
               selected ? index >= selected.start && index < selected.end : anchor === index
             }
-            onClick={() => select(index)}
+            onClick={() => {
+              select(index);
+            }}
             className="rounded-sm border px-2 py-1 font-serif"
           >
             {grapheme}
@@ -219,27 +223,27 @@ export function TypographySection({ projectId, pageIndex, wordId }: TypographySe
         type="button"
         onClick={() => {
           setAnchor(0);
-          setFocus(Math.max(0, head.graphemes.length - 1));
+          setFocus(Math.max(0, loadedHead.graphemes.length - 1));
         }}
       >
         Whole word
       </button>
       <div className="flex flex-wrap gap-1">
-        {head.taxonomy.labels.map((taxonomyLabel) => {
+        {loadedHead.taxonomy.labels.map((taxonomyLabel) => {
           const label = taxonomyLabel.value;
           return (
             <button
               type="button"
               key={label}
               aria-pressed={labels.has(label)}
-              onClick={() =>
+              onClick={() => {
                 setLabels((current) => {
                   const next = new Set(current);
                   if (next.has(label)) next.delete(label);
                   else next.add(label);
                   return next;
-                })
-              }
+                });
+              }}
             >
               {taxonomyLabel.display_name}
             </button>
@@ -251,47 +255,78 @@ export function TypographySection({ projectId, pageIndex, wordId }: TypographySe
       </button>
       <ul>
         {spans.map((span, index) => (
-          <li key={span.span_id} data-testid={`typography-span-${index}`}>
+          <li key={span.span_id} data-testid={`typography-span-${String(index)}`}>
             {span.start}–{span.end} {span.label}
             <button
               type="button"
-              aria-label={`Split span ${index + 1}`}
+              aria-label={`Split span ${String(index + 1)}`}
               disabled={span.end - span.start < 2}
-              onClick={() => splitSpan(index)}
+              onClick={() => {
+                splitSpan(index);
+              }}
             >
               Split
             </button>
             <button
               type="button"
-              aria-label={`Merge span ${index + 1}`}
+              aria-label={`Merge span ${String(index + 1)}`}
               disabled={!spans[index + 1]}
-              onClick={() => mergeSpan(index)}
+              onClick={() => {
+                mergeSpan(index);
+              }}
             >
               Merge next
             </button>
             <button
               type="button"
-              aria-label={`Delete span ${index + 1}`}
-              onClick={() => setSpans((all) => all.filter((_, i) => i !== index))}
+              aria-label={`Delete span ${String(index + 1)}`}
+              onClick={() => {
+                setSpans((all) => all.filter((_, i) => i !== index));
+              }}
             >
               ×
             </button>
           </li>
         ))}
       </ul>
-      <button type="button" onClick={() => submitFromButton("approved_edit")}>
+      <button
+        type="button"
+        onClick={() => {
+          submitFromButton("approved_edit");
+        }}
+      >
         Save typography
       </button>
-      <button type="button" onClick={() => submitFromButton("reviewed_regular", [], true)}>
+      <button
+        type="button"
+        onClick={() => {
+          submitFromButton("reviewed_regular", [], true);
+        }}
+      >
         Reviewed regular
       </button>
-      <button type="button" onClick={() => submitFromButton("reject_source")}>
+      <button
+        type="button"
+        onClick={() => {
+          submitFromButton("reject_source");
+        }}
+      >
         Reject source
       </button>
-      <button type="button" onClick={() => submitFromButton("unusable_image")}>
+      <button
+        type="button"
+        onClick={() => {
+          submitFromButton("unusable_image");
+        }}
+      >
         Quarantine
       </button>
-      <button type="button" onClick={() => submitFromButton("defer")}>
+      <button
+        type="button"
+        onClick={() => {
+          submitFromButton("defer");
+        }}
+      >
         Defer
       </button>
       {stale && (

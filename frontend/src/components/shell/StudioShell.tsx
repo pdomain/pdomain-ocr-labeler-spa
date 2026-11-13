@@ -46,7 +46,7 @@ export function StudioShell({
   drawerCollapsed = false,
   rightWidth,
 }: StudioShellProps) {
-  const rightWVar = rightWidth !== undefined ? `${rightWidth}px` : undefined;
+  const rightWVar = rightWidth !== undefined ? `${String(rightWidth)}px` : undefined;
   return (
     <div
       data-testid="studio-shell"
@@ -55,7 +55,7 @@ export function StudioShell({
         display: "grid",
         gridTemplateAreas: '"header header header header" "rail drawer canvas right"',
         gridTemplateColumns: `64px ${drawerCollapsed ? "0px" : "var(--drawer-w, 320px)"} 1fr var(--right-w, 520px)`,
-        gridTemplateRows: `${headerHeight}px 1fr`,
+        gridTemplateRows: `${String(headerHeight)}px 1fr`,
         ...(rightWVar ? { "--right-w": rightWVar } : {}),
       }}
     >

@@ -37,9 +37,9 @@ export function getWordOrder(page: PagePayload, lineIndex: number, wordIndex: nu
   const line = findLineByIndex(page, lineIndex);
   const words = sortedWordsByIndex(line);
   const position = words.findIndex((word) => word.word_index === wordIndex);
-  const word = position >= 0 ? words[position]! : null;
-  const prev = position > 0 ? words[position - 1]! : null;
-  const next = position >= 0 && position < words.length - 1 ? words[position + 1]! : null;
+  const word = position >= 0 ? (words[position] ?? null) : null;
+  const prev = position > 0 ? (words[position - 1] ?? null) : null;
+  const next = position >= 0 && position < words.length - 1 ? (words[position + 1] ?? null) : null;
 
   return { line, words, position, word, prev, next };
 }

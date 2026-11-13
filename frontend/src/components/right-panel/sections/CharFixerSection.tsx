@@ -1,3 +1,5 @@
+import { optionalString } from "../../../lib/runtimeValues";
+import { initialCharBboxes } from "./characterBboxes";
 // CharFixerSection.tsx — Per-character GT editor for a word.
 // Spec: docs/specs/2026-05-15-hifi-redesign-plan.md Slice 20.
 // P4.b (Gap 39): per-char bbox visualisation + drag-handle canvas + selected-
@@ -47,7 +49,7 @@ import { Input } from "@pdomain/pdomain-ui/primitives";
 import { UnicodePicker } from "../UnicodePicker";
 import { useUpdateWordGroundTruth, useSetCharBboxes } from "../../../hooks/useWordMutations";
 import type { components } from "../../../api/types";
-import { CharFixerCanvas, initialCharBboxes, type CharacterBBox } from "./CharFixerCanvas";
+import { CharFixerCanvas, type CharacterBBox } from "./CharFixerCanvas";
 import { toast } from "../../../lib/toast";
 
 type WordMatch = components["schemas"]["WordMatch"];
@@ -69,7 +71,7 @@ export interface CharFixerSectionProps {
  * (the wordKey effect resets state when the underlying word changes).
  */
 function buildInitialCharBboxes(word: WordMatch): CharacterBBox[] {
-  const chars = Array.from(word.ocr_text ?? "");
+  const chars = Array.from(optionalString(word.ocr_text) ?? "");
   if (chars.length === 0) return [];
   const ranges = chars.map((_, i) => ({ start: i, end: i }));
   return initialCharBboxes(word.bbox, ranges, chars.length);
@@ -120,8 +122,11 @@ export function CharFixerSection({ word, projectId, pageIndex, imageUrl }: CharF
   const updateGt = useUpdateWordGroundTruth(projectId, pageIndex);
   const charBboxesMutation = useSetCharBboxes(projectId, pageIndex);
 
-  const ocrChars = useMemo(() => Array.from(word.ocr_text ?? ""), [word.ocr_text]);
-  const gtChars = useMemo(() => Array.from(word.ground_truth_text ?? ""), [word.ground_truth_text]);
+  const ocrChars = useMemo(() => Array.from(optionalString(word.ocr_text) ?? ""), [word.ocr_text]);
+  const gtChars = useMemo(
+    () => Array.from(optionalString(word.ground_truth_text) ?? ""),
+    [word.ground_truth_text],
+  );
 
   // The number of editable cells is the max of OCR and GT lengths so a
   // longer GT is fully editable and a longer OCR shows all the originals.
@@ -134,7 +139,7 @@ export function CharFixerSection({ word, projectId, pageIndex, imageUrl }: CharF
   }, [cellCount, gtChars]);
 
   const [draft, setDraft] = useState<string[]>(initialDraft);
-  const wordKey = `${word.line_index}-${word.word_index ?? 0}-${word.ground_truth_text}`;
+  const wordKey = `${String(word.line_index)}-${String(word.word_index ?? 0)}-${optionalString(word.ground_truth_text) ?? ""}`;
   const lastWordKey = useRef(wordKey);
 
   // Refs to each input cell, for the unicode picker to insert into.
@@ -246,7 +251,9 @@ export function CharFixerSection({ word, projectId, pageIndex, imageUrl }: CharF
       if (index < 0 || index >= prev.length) return prev;
       const copy = [...prev];
       // index < prev.length checked above — non-null safe.
-      copy[index] = { ...copy[index]!, bbox: next };
+      const current = copy[index];
+      if (!current) return prev;
+      copy[index] = { ...current, bbox: next };
       return copy;
     });
     setDirty(true);
@@ -258,7 +265,8 @@ export function CharFixerSection({ word, projectId, pageIndex, imageUrl }: CharF
       setCharBboxes((prev) => {
         if (selectedIndex < 0 || selectedIndex >= prev.length) return prev;
         // selectedIndex < prev.length checked above — non-null safe.
-        const cur = prev[selectedIndex]!;
+        const cur = prev[selectedIndex];
+        if (!cur) return prev;
         const b = cur.bbox;
         let x1 = b.x;
         let y1 = b.y;
@@ -267,7 +275,7 @@ export function CharFixerSection({ word, projectId, pageIndex, imageUrl }: CharF
         if (axis === "x1") x1 = value;
         else if (axis === "y1") y1 = value;
         else if (axis === "x2") x2 = value;
-        else if (axis === "y2") y2 = value;
+        else y2 = value;
         // Normalise so width/height stay positive.
         const nx = Math.min(x1, x2);
         const ny = Math.min(y1, y2);
@@ -333,7 +341,7 @@ export function CharFixerSection({ word, projectId, pageIndex, imageUrl }: CharF
           <span
             data-testid="charfixer-detail-text"
             className="font-mono text-[12px] text-ink-1 px-1"
-            title={`chars ${selected.start}..${selected.end}`}
+            title={`chars ${String(selected.start)}..${String(selected.end)}`}
           >
             {selectedText}
           </span>
@@ -396,7 +404,7 @@ export function CharFixerSection({ word, projectId, pageIndex, imageUrl }: CharF
           return (
             <div
               key={i}
-              data-testid={`char-fixer-cell-${i}`}
+              data-testid={`char-fixer-cell-${String(i)}`}
               data-mismatch={isMismatch ? "true" : undefined}
               className={[
                 "flex flex-col items-center gap-0.5 rounded-sm border bg-sunk px-1 py-1",
@@ -406,9 +414,9 @@ export function CharFixerSection({ word, projectId, pageIndex, imageUrl }: CharF
               ].join(" ")}
             >
               <span
-                data-testid={`char-fixer-orig-${i}`}
+                data-testid={`char-fixer-orig-${String(i)}`}
                 className="text-[10px] text-ink-3 font-mono leading-none"
-                title={`OCR char ${i}`}
+                title={`OCR char ${String(i)}`}
               >
                 {orig || "∅"}
               </span>
@@ -416,7 +424,7 @@ export function CharFixerSection({ word, projectId, pageIndex, imageUrl }: CharF
                 ref={(el) => {
                   inputRefs.current[i] = el;
                 }}
-                data-testid={`char-fixer-input-${i}`}
+                data-testid={`char-fixer-input-${String(i)}`}
                 size="sm"
                 className="text-center px-0.5 h-6"
                 value={draftChar}

@@ -269,7 +269,7 @@ export function useDeleteRegion(projectId: string, pageIndex: number) {
 
 /** Export this page's confirmed region labels and reviewed layout structure. */
 export function useExportReviewedRegions(projectId: string, pageIndex: number) {
-  return useMutation<ExportResponse, Error>({
+  return useMutation<ExportResponse>({
     mutationFn: () => {
       const body: ExportRequest = {
         scope: "current",

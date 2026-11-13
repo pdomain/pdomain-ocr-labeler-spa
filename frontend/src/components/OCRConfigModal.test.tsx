@@ -382,3 +382,29 @@ describe("OCRConfigModal — S6.3 Cancel/snapshot semantics", () => {
     expect(onClose).toHaveBeenCalledOnce();
   });
 });
+
+describe("OCRConfigModal — untrusted rotation flags", () => {
+  it.each(["false", 0, null, {}, undefined])(
+    "defaults malformed flags %j safely",
+    async (value) => {
+      server.use(
+        http.get("/api/ocr-config", () =>
+          HttpResponse.json({
+            auto_rotate_available: value,
+            auto_rotate_on_load: value,
+            detection_options: [
+              { key: "loaded", label: "Loaded", source: "stock", is_default: true },
+            ],
+            selected_detection: "loaded",
+          }),
+        ),
+      );
+      renderModal();
+      await waitFor(() =>
+        expect(screen.getByTestId("ocr-detection-model-select")).toHaveValue("loaded"),
+      );
+      expect(screen.getByTestId("auto-rotate-checkbox")).toBeDisabled();
+      expect(screen.getByTestId("auto-rotate-checkbox")).toBeChecked();
+    },
+  );
+});

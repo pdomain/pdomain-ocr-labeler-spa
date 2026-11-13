@@ -34,18 +34,18 @@ export function LineWordsCard({ word, checked, onCheckedChange }: LineWordsCardP
 
   return (
     <div
-      data-testid={`line-words-card-${word.word_index}`}
+      data-testid={`line-words-card-${String(word.word_index)}`}
       className="flex items-start gap-2 bg-bg-raised rounded-sm px-2 py-1.5"
     >
       {/* Bulk selection checkbox */}
       <input
         type="checkbox"
-        data-testid={`line-words-card-checkbox-${word.word_index}`}
+        data-testid={`line-words-card-checkbox-${String(word.word_index)}`}
         checked={checked}
         onChange={(e) => {
           onCheckedChange(e.target.checked);
         }}
-        aria-label={`Select word ${wordNum}`}
+        aria-label={`Select word ${String(wordNum)}`}
         className="mt-0.5 accent-accent shrink-0"
       />
 

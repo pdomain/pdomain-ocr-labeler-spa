@@ -1,11 +1,9 @@
+import { layoutStructureFromUnknown } from "./layoutStructure";
+import { type LayoutStructureDraft } from "./layoutStructure";
 import { describe, expect, it } from "vitest";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import {
-  LayoutStructureEditor,
-  layoutStructureFromUnknown,
-  type LayoutStructureDraft,
-} from "./LayoutStructureEditor";
+import { LayoutStructureEditor } from "./LayoutStructureEditor";
 
 const STRUCTURE: LayoutStructureDraft = {
   kind: "poetry",

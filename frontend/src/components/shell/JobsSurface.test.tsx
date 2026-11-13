@@ -1,3 +1,4 @@
+import { useJobsShellProps } from "../../hooks/useJobsShellProps";
 // JobsSurface.test.tsx — tests through the REAL pdomain-ui JobsPill /
 // UtilityDockContext (unmocked), proving the actual `onClick` →
 // `useUtilityDock().toggle('jobs')` wiring the installed package documents,
@@ -17,7 +18,7 @@ import {
   type UtilityDockContextValue,
 } from "@pdomain/pdomain-ui/shell";
 import { server } from "../../test/server";
-import { JobsIndicator, useJobsShellProps } from "./JobsSurface";
+import { JobsIndicator } from "./JobsSurface";
 import { toJobRowJobs } from "../../lib/jobsMapping";
 import type { JobsListJob } from "../../hooks/useJobsList";
 

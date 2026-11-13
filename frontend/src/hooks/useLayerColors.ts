@@ -14,7 +14,7 @@
 // Note: LayerColorSpec is defined here (not in BBoxOverlay) to avoid a circular
 // import. BBoxOverlay re-exports it for backwards compatibility.
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect } from "react";
 
 /** Fill + stroke RGBA string pair per layer. */
 export interface LayerColorSpec {
@@ -77,11 +77,11 @@ function readLayerColors(): LayerColors {
  * pick up theme switches without needing a page reload or remount.
  */
 export function useLayerColors(): LayerColors {
-  const [version, setVersion] = useState(0);
+  const [colors, setColors] = useState(readLayerColors);
 
   useEffect(() => {
     const observer = new MutationObserver(() => {
-      setVersion((v) => v + 1);
+      setColors(readLayerColors());
     });
     observer.observe(document.documentElement, {
       attributes: true,
@@ -92,7 +92,7 @@ export function useLayerColors(): LayerColors {
     };
   }, []);
 
-  return useMemo(() => readLayerColors(), [version]);
+  return colors;
 }
 
 // ─── Hex → RGBA utility ───────────────────────────────────────────────────────
@@ -105,12 +105,12 @@ export function useLayerColors(): LayerColors {
  */
 export function hexToRgba(hex: string, alpha: number): string {
   const cleaned = hex.startsWith("#") ? hex.slice(1) : hex;
-  if (cleaned.length !== 6) return `rgba(0,0,0,${alpha})`;
+  if (cleaned.length !== 6) return `rgba(0,0,0,${String(alpha)})`;
   const r = parseInt(cleaned.slice(0, 2), 16);
   const g = parseInt(cleaned.slice(2, 4), 16);
   const b = parseInt(cleaned.slice(4, 6), 16);
-  if (isNaN(r) || isNaN(g) || isNaN(b)) return `rgba(0,0,0,${alpha})`;
-  return `rgba(${r},${g},${b},${alpha})`;
+  if (isNaN(r) || isNaN(g) || isNaN(b)) return `rgba(0,0,0,${String(alpha)})`;
+  return `rgba(${String(r)},${String(g)},${String(b)},${String(alpha)})`;
 }
 
 /** Alpha levels used for Konva overlay fill and stroke. */

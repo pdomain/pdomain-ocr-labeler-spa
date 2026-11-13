@@ -236,7 +236,7 @@ export function ToolbarActionGrid({
                   disabled={!isEnabled}
                   title={title}
                   onClick={() => {
-                    if (!isStub && stateKey && isEnabled) {
+                    if (!isStub && isEnabled) {
                       onAction(stateKey);
                     }
                   }}

@@ -13,5 +13,5 @@ type BBox = components["schemas"]["BBox"];
 export function bboxHint(bbox: BBox): string {
   const x2 = bbox.x + bbox.width;
   const y2 = bbox.y + bbox.height;
-  return `${bbox.x},${bbox.y} → ${x2},${y2}`;
+  return `${String(bbox.x)},${String(bbox.y)} → ${String(x2)},${String(y2)}`;
 }

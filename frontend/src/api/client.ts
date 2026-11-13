@@ -1,3 +1,4 @@
+import { optionalString, readField } from "../lib/runtimeValues";
 export class ApiError extends Error {
   constructor(
     public status: number,
@@ -51,8 +52,18 @@ export class ApiClient {
 
       try {
         if (text) {
-          errorData = JSON.parse(text);
-          message = errorData.message || response.statusText;
+          const data: unknown = JSON.parse(text);
+          const error = optionalString(readField(data, "error"));
+          const serverMessage = optionalString(readField(data, "message"));
+          errorData = {
+            ...(error === undefined ? {} : { error }),
+            ...(serverMessage === undefined ? {} : { message: serverMessage }),
+            details: readField(data, "details"),
+          };
+          message =
+            serverMessage !== undefined && serverMessage.length > 0
+              ? serverMessage
+              : response.statusText;
         }
       } catch {
         // If response is not JSON, use text as message
@@ -63,7 +74,9 @@ export class ApiClient {
 
       throw new ApiError(
         response.status,
-        errorData.error || `http_${response.status}`,
+        errorData.error !== undefined && errorData.error.length > 0
+          ? errorData.error
+          : `http_${String(response.status)}`,
         message,
         errorData.details,
       );

@@ -113,10 +113,11 @@ const AccordionContent = React.forwardRef<
 ));
 AccordionContent.displayName = AccordionPrimitive.Content.displayName;
 
-const Accordion = Object.assign(AccordionPrimitive.Root, {
-  Item: AccordionItem,
-  Trigger: AccordionTrigger,
-  Content: AccordionContent,
-});
+function Accordion(props: React.ComponentProps<typeof AccordionPrimitive.Root>) {
+  return <AccordionPrimitive.Root {...props} />;
+}
+Accordion.Item = AccordionItem;
+Accordion.Trigger = AccordionTrigger;
+Accordion.Content = AccordionContent;
 
 export { Accordion };

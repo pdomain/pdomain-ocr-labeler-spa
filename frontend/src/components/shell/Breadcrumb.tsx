@@ -110,17 +110,17 @@ function Sep() {
 
 function paraLabel(paraId: number | null | undefined): string {
   if (paraId === null || paraId === undefined) return "Unsorted";
-  return `Para ${paraId + 1}`;
+  return `Para ${String(paraId + 1)}`;
 }
 
 function lineLabel(lineId: number | undefined): string {
   if (lineId === undefined) return "";
-  return `Line ${lineId + 1}`;
+  return `Line ${String(lineId + 1)}`;
 }
 
 function wordLabel(wordId: [number, number] | undefined): string {
   if (!wordId) return "";
-  return `Word ${wordId[1] + 1}`;
+  return `Word ${String(wordId[1] + 1)}`;
 }
 
 function blockLabel(blockId: string | undefined): string {
@@ -191,7 +191,8 @@ function renderChips(level: SelectionLevel, path: SelectionPath) {
   // only keeps the compiler happy for the case where it somehow is not.
   const pageIndex = path.pageIndex ?? 0;
 
-  if (path.blockId !== undefined) {
+  const blockId = path.blockId;
+  if (blockId !== undefined) {
     nodes.push(<Sep key="sep-block" />);
     nodes.push(
       <Chip
@@ -201,12 +202,13 @@ function renderChips(level: SelectionLevel, path: SelectionPath) {
         layer="block"
         active={level === "block"}
         onClick={() => {
-          selectBlock(pageIndex, path.blockId!);
+          selectBlock(pageIndex, blockId);
         }}
       />,
     );
   }
-  if (path.paraId !== undefined) {
+  const paraId = path.paraId;
+  if (paraId !== undefined) {
     nodes.push(<Sep key="sep-para" />);
     nodes.push(
       <Chip
@@ -216,12 +218,13 @@ function renderChips(level: SelectionLevel, path: SelectionPath) {
         layer="para"
         active={level === "para"}
         onClick={() => {
-          selectPara(pageIndex, path.paraId!);
+          selectPara(pageIndex, paraId);
         }}
       />,
     );
   }
-  if (path.lineId !== undefined) {
+  const lineId = path.lineId;
+  if (lineId !== undefined) {
     nodes.push(<Sep key="sep-line" />);
     nodes.push(
       <Chip
@@ -231,7 +234,7 @@ function renderChips(level: SelectionLevel, path: SelectionPath) {
         layer="line"
         active={level === "line"}
         onClick={() => {
-          selectLine(pageIndex, path.lineId!);
+          selectLine(pageIndex, lineId);
         }}
       />,
     );
