@@ -3,14 +3,14 @@ kind: spec
 status: active
 owner: maintainers
 created: 2026-06-01
-last_verified: 2026-07-13
+last_verified: 2026-11-12
 ---
 
 # Behavior unit spec - Page actions and dialogs
 
 - **Unit type:** component
 - **Address:** `PageActionsCompact`, hidden `PageActions`, `OCRConfigModal`,
-  `SourceFolderDialog`, `ExportDialog`, `WordEditDialog`, `HotkeyHelpModal`
+  `SourceFolderDialog`, `ExportDialog`, `HotkeyHelpModal`
 - **UI definition:** none - existing stable UI documented in
   `docs/architecture/06-toolbar-actions.md`, `26-right-panel-detail.md`,
   `08-page-actions.md`, `10-export.md`, `12-hotkeys-a11y.md`,
@@ -20,7 +20,7 @@ last_verified: 2026-07-13
 - **Shared unit:** yes
 - **Implementation:** `frontend/src/components/PageActionsCompact.tsx`,
   `PageActions.tsx`, `OCRConfigModal.tsx`, `ExportDialog.tsx`,
-  `SourceFolderDialog.tsx`, `WordEditDialog.tsx`, `HotkeyHelpModal.tsx`,
+  `SourceFolderDialog.tsx`, `HotkeyHelpModal.tsx`,
   `frontend/src/stores/dialog-store.ts`
 - **Backend / collaborators touched:** save/reload/rematch/export endpoints,
   OCR config endpoints, filesystem browser endpoints, job runner, notification
@@ -98,21 +98,19 @@ last_verified: 2026-07-13
 - **Regression:** no
 - **Test:** -
 
-### B-ACTIONS-005 - Word edit dialog opens, navigates, and applies word edits
+### B-ACTIONS-005 - Pencil opens the right-panel word editor
 
-- **Flow(s):** -
+- **Flow(s):** F-DRIVER-OPEN-EDIT-01
 - **Composed by:** B-RIGHT-001
 - **Trigger:** User clicks `edit-word-button-{l}-{w}`.
-- **Preconditions:** Word match view or hidden driver-compatible trigger is
-  present for the selected word.
-- **Observable output:** `word-edit-dialog` opens with previous/current/next
-  preview columns; Apply updates the word without closing; Apply + Close closes.
-- **Backend / side-effects:** Dialog actions post word GT/style/component,
-  split/merge/delete, crop/refine, bbox nudge, and char-bbox mutations as
-  applicable; page data is invalidated/refetched after success.
-- **Bad-state / error:** First/last word disables invalid prev/next actions;
-  failed mutation keeps dialog open with recoverable draft state.
-- **Tier(s):** A+B for image-refine/erase paths, A otherwise
+- **Preconditions:** The word cell for that word is present.
+- **Observable output:** The click selects the word and shows `word-detail`
+  inside `right-panel`. No word-edit modal is mounted.
+- **Backend / side-effects:** Selection is client state. Later edits use the
+  right-panel word routes.
+- **Bad-state / error:** A missing word shows the panel's empty state. The
+  click does not open a modal.
+- **Tier(s):** A
 - **Regression:** no
 - **Test:** `tests/e2e/test_project_page_smoke.py::test_word_edit_dialog_lifecycle`
 
@@ -245,35 +243,35 @@ last_verified: 2026-07-13
 - **Regression:** no
 - **Test:** -
 
-### B-ACTIONS-014 - Word edit dialog image canvas stages visual edits
+### B-ACTIONS-014 - Right-panel geometry drafts stay local until apply
 
 - **Flow(s):** F-WORD-DIALOG-IMAGE-01
-- **Composed by:** B-ACTIONS-005
-- **Trigger:** User zooms, hovers, clicks markers, stages erase rects, crop, or
-  split coordinates.
-- **Preconditions:** Word edit dialog open with image data.
-- **Observable output:** Preview canvas updates hover guide, markers, staged
-  rectangles, pending apply/reset/discard state.
+- **Composed by:** B-ACTIONS-005, B-RIGHT-003
+- **Trigger:** User stages bbox, rebox, erase, or char-bbox edits on the
+  selected word.
+- **Preconditions:** `word-detail` is open for a word that has image data.
+- **Observable output:** The section shows the pending draft and enables apply
+  only when that draft is dirty.
 - **Backend / side-effects:** Staging is local until apply.
-- **Bad-state / error:** Reset/discard removes local staged edits without
-  posting mutations.
+- **Bad-state / error:** Reset or discard drops the local draft and posts
+  nothing.
 - **Tier(s):** A
 - **Regression:** no
 - **Test:** -
 
-### B-ACTIONS-015 - Word edit dialog mutation contract keeps drafts recoverable
+### B-ACTIONS-015 - Right-panel word edits keep a failed draft
 
 - **Flow(s):** F-WORD-DIALOG-MUTATE-01
 - **Composed by:** B-ACTIONS-005
-- **Trigger:** User applies GT/style/component, merge/split/delete, nudge,
-  refine, erase pixels, char ranges, or char bboxes.
-- **Preconditions:** Word edit dialog open with a selected word.
-- **Observable output:** Success updates preview/detail; failure keeps dialog and
-  draft open.
-- **Backend / side-effects:** Posts the same word/char mutation endpoints as
-  right-panel sections; page query invalidates after success.
-- **Bad-state / error:** Failed mutation must not silently close or discard the
-  pending draft.
+- **Trigger:** User applies ground truth, a structural component, merge, split,
+  delete, nudge, refine, erase pixels, or char bboxes from the mounted editor.
+- **Preconditions:** `word-detail` is open for a selected word.
+- **Observable output:** Success updates the detail. Failure leaves the draft
+  in the panel.
+- **Backend / side-effects:** Posts the right-panel word routes. Typography
+  spans replaced character-range mutations, which are not a current write.
+  The page query invalidates after success.
+- **Bad-state / error:** A failed mutation leaves the pending draft in place.
 - **Tier(s):** A+B
 - **Regression:** no
 - **Test:** -

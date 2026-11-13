@@ -1,11 +1,11 @@
 // PageActionsCompactUndo.test.tsx — visible undo/redo controls in the compact
-// header bar (slice H-C) + Reload-OCR confirm with history-reset warning (H-D).
+// header bar (slice H-C) + Reload-OCR confirm that offers the boundary undo.
 //
 // Spec: docs/specs/2026-06-12-event-store-undo.md
 //   U-1/U-2: clicking undo/redo fires the POST mutation.
 //   U-3: buttons disabled per PagePayload.history flags.
 //   U-6 (frontend half): Reload OCR routes through a confirm dialog whose copy
-//        warns that edit history resets.
+//        says undo will step back across the reload.
 //   U-7: overflow "Load Page" entry is renamed "Reload".
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
@@ -163,8 +163,8 @@ describe("PageActionsCompact: Reload rename in overflow (U-7)", () => {
   });
 });
 
-describe("PageActionsCompact: Reload-OCR confirm warns history resets (U-6/H-D)", () => {
-  it("clicking Reload OCR opens a confirm (no POST yet); copy mentions history", async () => {
+describe("PageActionsCompact: Reload-OCR confirm offers the boundary undo (U-M6)", () => {
+  it("clicking Reload OCR opens a confirm (no POST yet); copy offers the boundary undo", async () => {
     const reloadSpy = vi.fn(() => HttpResponse.json({ job_id: "j1" }, { status: 202 }));
     server.use(http.post("/api/projects/proj-1/pages/0/reload-ocr", reloadSpy));
     const user = userEvent.setup();
@@ -175,7 +175,7 @@ describe("PageActionsCompact: Reload-OCR confirm warns history resets (U-6/H-D)"
     expect(reloadSpy).not.toHaveBeenCalled();
     const confirm = dialogStore.getState().confirm;
     expect(confirm.open).toBe(true);
-    expect(`${confirm.title ?? ""} ${confirm.body ?? ""}`).toMatch(/history/i);
+    expect(`${confirm.title ?? ""} ${confirm.body ?? ""}`).toMatch(/step back across this reload/i);
 
     // Confirming fires the POST.
     confirm.onConfirm?.();
@@ -184,7 +184,7 @@ describe("PageActionsCompact: Reload-OCR confirm warns history resets (U-6/H-D)"
     });
   });
 
-  it("Reload OCR (Edited) in the overflow also routes through the history-reset confirm", async () => {
+  it("Reload OCR (Edited) in the overflow also routes through the boundary-undo confirm", async () => {
     stubPage({ undo_available: false, redo_available: false });
     server.use(
       http.get("/api/projects/:pid/pages/:idx", () =>
@@ -213,7 +213,7 @@ describe("PageActionsCompact: Reload-OCR confirm warns history resets (U-6/H-D)"
     expect(reloadSpy).not.toHaveBeenCalled();
     const confirm = dialogStore.getState().confirm;
     expect(confirm.open).toBe(true);
-    expect(`${confirm.title ?? ""} ${confirm.body ?? ""}`).toMatch(/history/i);
+    expect(`${confirm.title ?? ""} ${confirm.body ?? ""}`).toMatch(/step back across this reload/i);
     confirm.onConfirm?.();
     await waitFor(() => {
       expect(reloadSpy).toHaveBeenCalled();

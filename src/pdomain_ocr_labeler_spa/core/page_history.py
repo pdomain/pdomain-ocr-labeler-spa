@@ -33,9 +33,11 @@ Pure functions only — no I/O, no store access.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING, Any, Literal
 from uuid import uuid4
+
+from pdomain_ops.pages import DeadBranch
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -210,6 +212,71 @@ def build_version_list(
     return versions
 
 
+@dataclass(frozen=True)
+class DerivedDeadBranch:
+    """One truncated redo segment, derived at prune time.
+
+    ``branch`` is the ``DeadBranch`` vocabulary. ``node_ids`` are the version
+    nodes dropped from the active chain when a later edit truncated them.
+    """
+
+    branch: DeadBranch
+    node_ids: frozenset[str]
+
+
+def derive_dead_segments(
+    graph: ProvenanceGraph,
+    *,
+    retention: timedelta,
+    now: datetime,
+) -> tuple[DerivedDeadBranch, ...]:
+    """Replay *graph* and return every truncated redo segment.
+
+    The walk matches ``derive_history``. A node with no timestamp is treated
+    as truncated at *now*, so its retention window is still open.
+    """
+    chain: list[str] = []
+    cursor = -1
+    prev_id: str | None = None
+    found: list[DerivedDeadBranch] = []
+    for node_id in graph.history:
+        if node_id == prev_id:
+            continue
+        prev_id = node_id
+        node = graph.nodes.get(node_id)
+        if node is None:  # pragma: no cover - defensive
+            continue
+        marker = _history_op_marker(node)
+        if marker is not None:
+            restores = marker.get("restores")
+            if isinstance(restores, str) and restores in chain:
+                cursor = chain.index(restores)
+            continue
+        if not node.blob_refs:
+            continue
+        if cursor + 1 < len(chain):
+            truncated = chain[cursor + 1 :]
+            superseded_at = node.timestamp if node.timestamp is not None else now
+            if superseded_at.tzinfo is None:
+                superseded_at = superseded_at.replace(tzinfo=UTC)
+            forked = chain[cursor] if cursor >= 0 else truncated[0]
+            found.append(
+                DerivedDeadBranch(
+                    branch=DeadBranch(
+                        tip_id=truncated[-1],
+                        forked_from_id=forked,
+                        superseded_at=superseded_at,
+                        retain_until=superseded_at + retention,
+                    ),
+                    node_ids=frozenset(truncated),
+                )
+            )
+        del chain[cursor + 1 :]
+        chain.append(node_id)
+        cursor = len(chain) - 1
+    return tuple(found)
+
+
 def build_history_marker_node(
     *,
     op: HistoryOp,
@@ -242,10 +309,12 @@ def build_history_marker_node(
 
 __all__ = [
     "DEFAULT_UNDO_DEPTH",
+    "DerivedDeadBranch",
     "HistoryOp",
     "HistoryState",
     "VersionEntry",
     "build_history_marker_node",
     "build_version_list",
+    "derive_dead_segments",
     "derive_history",
 ]

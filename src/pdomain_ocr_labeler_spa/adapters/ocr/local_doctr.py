@@ -34,11 +34,12 @@ import uuid
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Literal
 
 from ...core.labeler_sidecars import LegacyTypographyPayloadError
 from ...core.models import Project
 from ...core.ocr.predictor import PredictorCache
+from ...core.page_lineage import link_replacement
 from ...core.page_state import (
     PageImageNotFoundError,
     PageLoadOutcome,
@@ -149,6 +150,7 @@ def _ingest_ocr_result(
     project: Any = None,  # Project — its project_id keys the ProjectAggregate
     image_is_edited: bool = False,
     tool: str = "doctr",
+    boundary_op: Literal["reocr", "rotate"] = "reocr",
 ) -> Any:  # PageAggregate
     """Fire OcrCompleted on a new PageAggregate and persist via LabelerPageStore.
 
@@ -253,6 +255,13 @@ def _ingest_ocr_result(
     # the (already-saved) page aggregate.
     if project is not None:
         try:
+            link_replacement(
+                store,
+                project_id=project.project_id,
+                new_aggregate=agg,
+                page_index=page_index,
+                boundary_op=boundary_op,
+            )
             _register_page_in_project(
                 store=store,
                 project_id=project.project_id,

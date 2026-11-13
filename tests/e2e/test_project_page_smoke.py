@@ -2,8 +2,7 @@
 
 Loads the tiny-fixture project, navigates Prev/Next via the real
 ProjectNavigationControls, opens the OCR-config dialog from the
-HeaderBar trigger, and verifies the WordEditDialog can be opened
-and closed through the dialog store.
+HeaderBar trigger, and opens a word in the mounted right-panel editor.
 
 Spec: specs/22-page-surface-wireup.md §12 (Acceptance gates).
 Issue #314 (spec-22-C).
@@ -15,7 +14,7 @@ import pytest
 from playwright.sync_api import Page
 
 from tests.e2e.conftest import LiveServer
-from tests.e2e.helpers import wait_for_page_loaded
+from tests.e2e.helpers import require_page_line_matches, wait_for_page_loaded
 from tests.e2e.test_driver_contract import _load_tiny_fixture
 
 
@@ -103,37 +102,30 @@ def test_open_ocr_config_dialog(live_server: LiveServer, page: Page) -> None:
 
 @pytest.mark.e2e
 def test_word_edit_dialog_lifecycle(live_server: LiveServer, page: Page) -> None:
-    """Open the word-edit dialog via the dialog store, then close it.
+    """Select a word with the pencil and show it in the right panel.
 
-    Covers: B-ACTIONS-005
+    Covers: B-ACTIONS-005 and driver-contract section 2.11.
 
-    The fixture project has no pre-validated lines, but the dialog opens
-    purely from the dialog store — `dialogStore.openWordEdit({...})` —
-    so we can exercise the open/close path without needing to click a
-    LineCard pencil. This avoids coupling the smoke test to LineCard
-    rendering, which depends on backend OCR output the smoke fixture
-    may not have.
+    The pencil selects the word and opens ``word-detail``. The retired
+    modal is not mounted.
     """
     _load_tiny_fixture(live_server.base_url, str(live_server.source_root))
+    require_page_line_matches(live_server.base_url, "tiny-fixture", 0)
 
     url = f"{live_server.base_url}/projects/tiny-fixture/pages/pageno/1"
     page.goto(url, timeout=15_000)
     wait_for_page_loaded(page, live_server.base_url, timeout=15_000)
 
-    # Trigger openWordEdit from page-side JS (the dialog store is module-
-    # scoped; we access it via dynamic import on the SPA's own bundle).
-    # If no line-card is rendered yet, this still validates that the
-    # dialog itself mounts when the store is set.
-    page.evaluate(
-        """async () => {
-            // Access the dialog store through the React tree:
-            // the spec exposes `dialogStore` on window only in dev mode,
-            // so fall back to clicking the close button on whatever
-            // dialog is already mounted. The simplest portable smoke
-            // assertion is that the project-page shell remains alive.
-            return true;
-        }"""
-    )
+    page.wait_for_selector('[data-testid="project-page"]', timeout=10_000)
+    page.wait_for_selector('[data-testid="right-panel"]', state="visible", timeout=10_000)
+    assert page.locator('[data-testid="word-edit-dialog"]').count() == 0
 
-    # Validate the shell is still healthy after the lifecycle attempt.
-    page.wait_for_selector('[data-testid="project-page"]', timeout=5_000)
+    page.click('[data-testid="text-tab-matches"]')
+    pencil = page.locator('[data-testid="edit-word-button-0-0"]')
+    pencil.wait_for(state="visible", timeout=10_000)
+    pencil.click()
+
+    detail = page.locator('[data-testid="word-detail"]')
+    detail.wait_for(state="visible", timeout=10_000)
+    assert detail.first.is_visible()
+    assert page.locator('[data-testid="word-edit-dialog"]').count() == 0

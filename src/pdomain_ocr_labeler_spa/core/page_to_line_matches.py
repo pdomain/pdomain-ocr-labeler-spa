@@ -35,6 +35,8 @@ from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
 
 from pdomain_ops.pages import PageRecord
 
+from .word_identity import identity_reading_order
+
 if TYPE_CHECKING:
     from pdomain_book_tools.ocr.page import Page as _Page
 
@@ -514,6 +516,7 @@ def page_to_line_matches(
                 words = getattr(line, "words", []) or []
                 word_matches: list[WordMatch] = []
                 for word_idx, word in enumerate(words):
+                    identity_order = identity_reading_order(word, reading_order)
                     wm = _word_to_word_match(
                         word_idx,
                         line_idx,
@@ -524,7 +527,7 @@ def page_to_line_matches(
                         glyph_predictions_map=glyph_predictions_map,
                         page_width=page_width,
                         page_height=page_height,
-                        stable_identity=(project_id, stable_page_id, reading_order)
+                        stable_identity=(project_id, stable_page_id, identity_order)
                         if project_id is not None and stable_page_id is not None
                         else None,
                     )

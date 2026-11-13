@@ -440,11 +440,12 @@ def test_reload_button_renamed_with_new_confirm_copy(undo_server: UndoServer, pa
 @pytest.mark.e2e
 @pytest.mark.slow
 def test_reload_ocr_resets_history(undo_server: UndoServer, page: Page) -> None:
-    """U-6: re-OCR creates a new aggregate — afterwards both buttons disabled.
+    """U-11: re-OCR starts a new aggregate and undo still crosses that boundary.
 
-    The confirm dialog warns that edit history resets before the job runs.
-    Runs real (cold) OCR on the blank fixture image; first model load can
-    take tens of seconds, hence the generous waits and the ``slow`` marker.
+    The confirm dialog says undo will step back across the reload. The new
+    aggregate's own chain is the OCR root, so redo stays off. Runs real
+    (cold) OCR on the blank fixture image; first model load can take tens
+    of seconds, hence the generous waits and the ``slow`` marker.
     """
     _goto_page(page, undo_server, page_no=2)
 
@@ -457,28 +458,29 @@ def test_reload_ocr_resets_history(undo_server: UndoServer, page: Page) -> None:
         time.sleep(0.25)
     expect(_undo_btn(page)).to_be_enabled(timeout=10_000)
 
-    # Reload OCR → confirm dialog mentions the history reset (U-6 copy).
+    # Reload OCR → confirm says undo crosses the new aggregate (U-11 copy).
     page.locator('[data-testid="reload-ocr-button"]').click()
     dialog = page.locator('[data-testid="confirm-dialog"]')
     dialog.wait_for(state="visible", timeout=5_000)
-    assert "history" in (dialog.text_content() or "").lower()
+    assert "step back across this reload" in (dialog.text_content() or "").lower()
     _confirm(page)
 
-    # Wait until the page payload reports a FRESH history (new aggregate):
-    # undo and redo both unavailable. Cold OCR can take a while.
+    # The edited page is past the OCR root. The replacement aggregate sits
+    # on its own root and still offers undo. Cold OCR can take a while.
     deadline = time.monotonic() + 180
     history = None
     while time.monotonic() < deadline:
         history = _api_page(undo_server, 1).get("history")
-        if history is not None and history["undo_available"] is False:
+        if history is not None and history.get("cursor") == 0 and history.get("undo_available") is True:
             break
         time.sleep(1.0)
     assert history is not None
-    assert history["undo_available"] is False, "history did not reset after re-OCR"
+    assert history["cursor"] == 0, "re-OCR did not publish a fresh aggregate"
+    assert history["undo_available"] is True, "boundary undo was not offered after re-OCR"
     assert history["redo_available"] is False
 
-    # And the buttons reflect it (no crash, no stale-aggregate writes).
+    # The buttons follow that payload (no crash, no stale-aggregate writes).
     page.reload()
     wait_for_page_loaded(page, undo_server.base_url, timeout=60_000)
-    expect(_undo_btn(page)).to_be_disabled(timeout=10_000)
+    expect(_undo_btn(page)).to_be_enabled(timeout=10_000)
     expect(_redo_btn(page)).to_be_disabled()

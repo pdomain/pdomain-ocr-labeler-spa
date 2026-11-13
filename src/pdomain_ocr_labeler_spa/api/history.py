@@ -19,15 +19,22 @@ same active chain undo/redo/jump already agree on
 from __future__ import annotations
 
 import logging
+from collections.abc import Callable
 from datetime import UTC, datetime
+from pathlib import Path
+from typing import TYPE_CHECKING
+from uuid import UUID
 
 from fastapi import APIRouter, Depends
 from fastapi.responses import JSONResponse
+from pdomain_book_tools.ocr.page import Page
 from pydantic import BaseModel
 
+from ..core.labeler_sidecars import LabelerSidecars, apply_sidecars_to_page_state
 from ..core.models import PageSource
 from ..core.page_history import HistoryOp, build_history_marker_node, build_version_list, derive_history
 from ..core.page_kind.reviewed_store import PageKindReviewedStore
+from ..core.page_lineage import lineage_of, lineage_step_id, project_uuid_for
 from ..core.page_state import PageLoadOutcome
 from ..core.persistence.config_yaml import AppConfig
 from ..core.persistence.page_store import LabelerPageStore
@@ -49,6 +56,10 @@ from .pages import (
     _resolve_page_object_for_pages,
     _resolve_undo_depth,
 )
+
+if TYPE_CHECKING:
+    from pdomain_ops.page_aggregate import PageAggregate
+    from pdomain_ops.pages import ProvenanceGraph
 
 log = logging.getLogger(__name__)
 
@@ -84,6 +95,213 @@ def _history_conflict(error: str, message: str) -> JSONResponse:
         status_code=409,
         content=ApiError(error=error, message=message).model_dump(),
     )
+
+
+def _read_restored_page(
+    store: LabelerPageStore,
+    restored_hash: str,
+    *,
+    op: HistoryOp,
+    page_index: int,
+) -> tuple[Page, LabelerSidecars] | JSONResponse:
+    """Read a content blob into a ``Page`` plus its sidecar payload."""
+    try:
+        from ..core.labeler_sidecars import parse_content_blob, stamp_sidecars_on_page
+
+        page_bytes = store.blobs.read(restored_hash)
+        page_dict, restored_sidecars = parse_content_blob(page_bytes)
+        restored_page = Page.from_dict(page_dict)
+        stamp_sidecars_on_page(restored_page, restored_sidecars)
+    except Exception as exc:
+        log.exception("%s: restore blob read failed for page=%d", op, page_index)
+        return JSONResponse(
+            status_code=500,
+            content=ApiError(
+                error="restore_failed",
+                message=f"failed to read restored content for page {page_index}: {exc}",
+            ).model_dump(),
+        )
+    return restored_page, restored_sidecars
+
+
+def _path_within(child: Path, parent: Path) -> bool:
+    """Return True when *child* is *parent* or a file inside it."""
+    try:
+        child.relative_to(parent)
+        return True
+    except ValueError:
+        return False
+
+
+def _boundary_op(aggregate: PageAggregate) -> str | None:
+    lineage = lineage_of(aggregate)
+    if lineage is None:
+        return None
+    return lineage.boundary_op
+
+
+def _generation_image_hash(graph: ProvenanceGraph | None) -> str | None:
+    """Return the OCR image hash for one aggregate.
+
+    An edit after OCR stores only the page JSON on the new head. The image
+    hash stays on the ingest node (``blob_refs[1]``).
+    """
+    if graph is None:
+        return None
+    fallback: str | None = None
+    for node in graph.nodes.values():
+        refs = node.blob_refs
+        if len(refs) < 2:
+            continue
+        if node.source == "ocr":
+            return refs[1]
+        if fallback is None:
+            fallback = refs[1]
+    return fallback
+
+
+def _write_bytes_atomically(path: Path, data: bytes) -> None:
+    """Replace *path* with *data*. The previous file stays until the replace."""
+    temporary = path.with_name(f".{path.name}.labeler-restore")
+    try:
+        temporary.write_bytes(data)
+        temporary.replace(path)
+    except Exception:
+        temporary.unlink(missing_ok=True)
+        raise
+
+
+def _replace_image_then(path: Path, data: bytes, save: Callable[[], None]) -> None:
+    """Write *data* to *path*, run *save*, and put the old bytes back if *save* fails."""
+    previous = path.read_bytes() if path.is_file() else None
+    _write_bytes_atomically(path, data)
+    try:
+        save()
+    except Exception:
+        try:
+            if previous is None:
+                path.unlink(missing_ok=True)
+            else:
+                _write_bytes_atomically(path, previous)
+        except Exception:
+            log.exception("rotate image rollback failed for %s", path)
+        raise
+
+
+def _restore_failed(page_index: int, detail: str) -> JSONResponse:
+    return JSONResponse(
+        status_code=500,
+        content=ApiError(
+            error="restore_failed",
+            message=f"failed to restore the rotated image for page {page_index}: {detail}",
+        ).model_dump(),
+    )
+
+
+def _restore_rotate_image(
+    *,
+    store: LabelerPageStore,
+    image_hash: str,
+    image_path: Path,
+    project_root: Path,
+    op: HistoryOp,
+    page_index: int,
+    save: Callable[[], None],
+) -> JSONResponse | None:
+    """Write the target aggregate's OCR image blob onto the source path, then save the slot.
+
+    A re-OCR cross does not call this. The image URL is unchanged. If the slot
+    save fails, the previous file bytes are written back.
+    """
+    if image_hash != Path(image_hash).name or image_hash in {"", ".", ".."}:
+        log.warning("%s: rotate image hash is not a blob name page=%d", op, page_index)
+        return _restore_failed(page_index, "image hash is not a blob name")
+    resolved = image_path.resolve()
+    root = project_root.resolve()
+    if not _path_within(resolved, root):
+        log.warning("%s: rotate image path is outside the project page=%d", op, page_index)
+        return _restore_failed(page_index, "image path is outside the project")
+    try:
+        data = store.blobs.read(image_hash)
+    except Exception as exc:
+        log.exception("%s: rotate image blob read failed page=%d", op, page_index)
+        return _restore_failed(page_index, str(exc))
+    try:
+        _replace_image_then(resolved, data, save)
+    except Exception as exc:
+        log.exception("%s: rotate image restore failed page=%d", op, page_index)
+        return _restore_failed(page_index, str(exc))
+    return None
+
+
+def _restore_lineage_step(
+    *,
+    store: LabelerPageStore,
+    op: HistoryOp,
+    project_id: str,
+    page_index: int,
+    current_page_id: UUID,
+    target_page_id: UUID,
+    current_agg: PageAggregate,
+    image_path: Path | None,
+    project_root: Path,
+) -> tuple[str, Page, LabelerSidecars, UUID] | JSONResponse:
+    """Re-point the project slot at *target_page_id* and load that aggregate's head.
+
+    The content blob is read before ``PageReordered`` is saved. A missing blob
+    leaves the slot where it was. The durable record is ``PageReordered``.
+    This path does not append a ``labeler_edited`` marker on either aggregate.
+    """
+    try:
+        target_agg = store.get_page(target_page_id)
+    except Exception:
+        log.debug("%s: lineage aggregate missing page_id=%s", op, target_page_id)
+        return _history_conflict(f"{op}_unavailable", f"nothing to {op} for page {page_index}")
+    target_graph = target_agg.record.provenance
+    head = target_graph.head if target_graph is not None else None
+    if head is None or not head.blob_refs:
+        return _history_conflict(f"{op}_unavailable", f"nothing to {op} for page {page_index}")
+    try:
+        project_agg = store.get_project(project_uuid_for(project_id))
+    except Exception:
+        log.debug("%s: project aggregate missing for lineage cross project=%s", op, project_id)
+        return _history_conflict(f"{op}_unavailable", f"nothing to {op} for page {page_index}")
+    page_ids = list(project_agg.record.page_ids)
+    if current_page_id in page_ids:
+        slot = page_ids.index(current_page_id)
+    elif 0 <= page_index < len(page_ids):
+        slot = page_index
+    else:
+        return _history_conflict(f"{op}_unavailable", f"nothing to {op} for page {page_index}")
+    loaded = _read_restored_page(store, head.blob_refs[0], op=op, page_index=page_index)
+    if isinstance(loaded, JSONResponse):
+        return loaded
+    restored_page, restored_sidecars = loaded
+    rotate_cross = _boundary_op(current_agg) == "rotate" or _boundary_op(target_agg) == "rotate"
+    image_hash = _generation_image_hash(target_graph) if rotate_cross else None
+
+    def _save_slot() -> None:
+        page_ids[slot] = target_page_id
+        project_agg.reorder_pages(page_ids)
+        store.save_project(project_agg)
+
+    if rotate_cross and image_path is not None and image_hash is not None:
+        image_error = _restore_rotate_image(
+            store=store,
+            image_hash=image_hash,
+            image_path=image_path,
+            project_root=project_root,
+            op=op,
+            page_index=page_index,
+            save=_save_slot,
+        )
+        if image_error is not None:
+            return image_error
+    else:
+        if rotate_cross:
+            log.warning("%s: rotate boundary has no source image to restore page=%d", op, page_index)
+        _save_slot()
+    return head.blob_refs[0], restored_page, restored_sidecars, target_page_id
 
 
 def _execute_history_op(
@@ -164,59 +382,74 @@ def _execute_history_op(
             target = state.redo_target()
         else:
             target = state.jump_target(jump_target_node_id) if jump_target_node_id is not None else None
-        if target is None:
+        lineage_page_id = (
+            lineage_step_id(
+                lineage_of(agg),
+                op=op,
+                cursor=state.cursor,
+                chain_length=len(state.chain),
+            )
+            if target is None
+            else None
+        )
+        if target is None and lineage_page_id is None:
             message = (
                 f"target {jump_target_node_id!r} is not in the active chain for page {page_index}"
                 if op == "jump"
                 else f"nothing to {op} for page {page_index}"
             )
             return _history_conflict(f"{op}_unavailable", message)
-        current = state.chain[state.cursor]
 
-        target_node = graph.nodes.get(target)
-        if target_node is None or not target_node.blob_refs:  # pragma: no cover - chain invariant
-            return _history_conflict(
-                "history_unavailable",
-                f"restore target {target!r} has no content blob",
+        if lineage_page_id is not None:
+            source_image: Path | None = None
+            try:
+                source_image = project_state.labeling_image_path(page_index)
+            except (ValueError, IndexError, OSError):
+                source_image = None
+            restored = _restore_lineage_step(
+                store=store,
+                op=op,
+                project_id=project.project_id,
+                page_index=page_index,
+                current_page_id=page_id,
+                target_page_id=lineage_page_id,
+                current_agg=agg,
+                image_path=source_image,
+                project_root=Path(project.project_root),
             )
-        restored_hash = target_node.blob_refs[0]
-
-        try:
-            from pdomain_book_tools.ocr.page import Page
-
-            from ..core.labeler_sidecars import (
-                apply_sidecars_to_page_state,
-                parse_content_blob,
-                stamp_sidecars_on_page,
+            if isinstance(restored, JSONResponse):
+                return restored
+            restored_hash, restored_page, restored_sidecars, active_page_id = restored
+        else:
+            if target is None:  # pragma: no cover - lineage_page_id covers this
+                return _history_conflict(f"{op}_unavailable", f"nothing to {op} for page {page_index}")
+            current = state.chain[state.cursor]
+            target_node = graph.nodes.get(target)
+            if target_node is None or not target_node.blob_refs:  # pragma: no cover - chain invariant
+                return _history_conflict(
+                    "history_unavailable",
+                    f"restore target {target!r} has no content blob",
+                )
+            restored_hash = target_node.blob_refs[0]
+            loaded = _read_restored_page(store, restored_hash, op=op, page_index=page_index)
+            if isinstance(loaded, JSONResponse):
+                return loaded
+            restored_page, restored_sidecars = loaded
+            # Append the marker event — the durable record of the revert (U-9).
+            # A boundary cross does not: the PageReordered event is that record.
+            marker = build_history_marker_node(
+                op=op,
+                restores=target,
+                undoes=current,
+                restored_blob_hash=restored_hash,
+                parent_id=graph.head_id,
             )
-
-            page_bytes = store.blobs.read(restored_hash)
-            page_dict, restored_sidecars = parse_content_blob(page_bytes)
-            restored_page = Page.from_dict(page_dict)
-            stamp_sidecars_on_page(restored_page, restored_sidecars)
-        except Exception as exc:
-            log.exception("%s: restore blob read failed for page=%d", op, page_index)
-            return JSONResponse(
-                status_code=500,
-                content=ApiError(
-                    error="restore_failed",
-                    message=f"failed to read restored content for page {page_index}: {exc}",
-                ).model_dump(),
+            agg.labeler_edited(
+                provenance_node=marker,
+                changes=[{"type": op, "restores": target, "undoes": current}],
             )
-
-        # Append the marker event — the durable record of the revert (U-9).
-        marker = build_history_marker_node(
-            op=op,
-            restores=target,
-            undoes=current,
-            restored_blob_hash=restored_hash,
-            parent_id=graph.head_id,
-        )
-        agg.labeler_edited(
-            provenance_node=marker,
-            changes=[{"type": op, "restores": target, "undoes": current}],
-        )
-        store.save_page(agg)
+            store.save_page(agg)
+            active_page_id = page_id
 
         # pdomain-ocr-synth's docs/specs/2026-09-18-one-answer-to-what-to-
         # review-next.md "A per-page count journal": undo/redo restores an
@@ -252,11 +485,12 @@ def _execute_history_op(
                 )
 
         # Swap the in-memory payload; re-stamp the aggregate id so subsequent
-        # mutations target the same aggregate (same stamp discipline as the
-        # restart read path, local_doctr.py:374). Wave 0.1: rehydrate char
-        # sidecars from the restored blob so maps never overlay a different
-        # content version after undo/redo.
-        object.__setattr__(restored_page, "_labeler_page_id", page_id)
+        # mutations target the aggregate this step landed on (the same stamp
+        # discipline as the restart read path). A boundary cross changes that
+        # id. Wave 0.1: rehydrate char sidecars from the restored blob so maps
+        # never overlay a different content version after undo/redo.
+        object.__setattr__(restored_page, "_labeler_page_id", active_page_id)
+        pstate.page_id = active_page_id
         pstate.page_record = PageLoadOutcome(
             page_index=page_index,
             source=PageSource.FILESYSTEM,

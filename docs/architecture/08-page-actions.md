@@ -3,7 +3,7 @@ kind: architecture
 status: built
 owner: maintainers
 created: 2026-05-06
-last_verified: 2026-07-13
+last_verified: 2026-11-12
 ---
 
 # 08 — Page Actions
@@ -161,8 +161,8 @@ per-page blob-version restore over the aggregate's provenance history.
 409 at the bounds. Availability flags ride on `PagePayload.history`
 (`undo_available` / `redo_available` / `cursor` / `depth`); depth is
 bounded by `PDLABELER_UNDO_DEPTH` (default 50). Reload OCR and rotate
-create a new page aggregate, so the history resets across that boundary
-(the Reload-OCR confirm warns about it). Full design:
+replace the page aggregate and record page-slot lineage. Undo steps back
+across that boundary. The Reload OCR confirm says so. Full design:
 `docs/specs/2026-06-12-event-store-undo.md`.
 
 ---

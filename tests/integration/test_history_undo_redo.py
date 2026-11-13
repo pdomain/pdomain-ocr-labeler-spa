@@ -19,6 +19,7 @@ import json
 import threading
 from collections.abc import Iterator
 from pathlib import Path
+from typing import Literal
 from uuid import UUID, uuid4
 
 import pytest
@@ -65,13 +66,13 @@ def _para(lines: list[dict[str, object]]) -> dict[str, object]:
     return {"type": "Block", "child_type": "BLOCKS", "items": lines, "bounding_box": _bbox(0, 0, 100, 40)}
 
 
-def _make_page() -> Page:
+def _make_page(first: str = "teh") -> Page:
     page_dict = {
         "width": 200,
         "height": 300,
         "page_index": 0,
         "bounding_box": _bbox(0, 0, 200, 300),
-        "items": [_para([_line([_word("teh"), _word("cat")]), _line([_word("sat")])])],
+        "items": [_para([_line([_word(first), _word("cat")]), _line([_word("sat")])])],
     }
     return Page.from_dict(page_dict)
 
@@ -718,3 +719,338 @@ def test_openapi_has_jump_and_history_versions(tmp_path: Path) -> None:
     assert "/api/projects/{project_id}/pages/{page_index}/history/versions" in paths
     version_props = schema["components"]["schemas"]["HistoryVersionInfo"]["properties"]
     assert set(version_props) >= {"node_id", "label", "timestamp", "is_current"}
+
+
+def _loaded_client(tmp_path: Path, project: Path) -> TestClient:
+    settings = _make_settings(tmp_path, source_projects_root=project.parent)
+    app = build_app(settings)
+    client = TestClient(app)
+    client.__enter__()
+    loaded = client.post("/api/projects/load", json={"project_root": str(project)})
+    assert loaded.status_code == 200, loaded.text
+    primed = client.get("/api/projects/book1/pages/0")
+    assert primed.status_code == 200, primed.text
+    return client
+
+
+def _replace_page(
+    project_dir: Path,
+    first: str,
+    *,
+    boundary_op: Literal["reocr", "rotate"] = "reocr",
+    image_bytes: bytes | None = None,
+) -> UUID:
+    """Ingest a new aggregate at page 0. The caller must not hold the sqlite store open."""
+    store = LabelerPageStore(project_dir=project_dir)
+    try:
+        page = _make_page(first)
+        page_id = uuid4()
+        object.__setattr__(page, "page_id", page_id)
+        _ingest_ocr_result(
+            page=page,
+            image_bytes=_png_bytes() if image_bytes is None else image_bytes,
+            page_index=0,
+            store=store,
+            project=Project(
+                project_id="book1",
+                project_root=project_dir,
+                image_paths=[project_dir / "001.png"],
+                ground_truth_map={},
+                total_pages=1,
+            ),
+            boundary_op=boundary_op,
+        )
+        return page_id
+    finally:
+        store.close()
+
+
+def _slot_id(project_dir: Path) -> UUID:
+    store = LabelerPageStore(project_dir=project_dir)
+    try:
+        return store.get_project(_project_uuid("book1")).record.page_ids[0]
+    finally:
+        store.close()
+
+
+@pytest.mark.integration
+def test_reocr_undo_crosses_back_to_the_edited_page(tmp_path: Path, seeded_project: Path) -> None:
+    """U-11/U-12: undo at the new aggregate's cursor 0 restores the pre-re-OCR head."""
+    original = _slot_id(seeded_project)
+    client = _loaded_client(tmp_path, seeded_project)
+    try:
+        edited = client.post("/api/projects/book1/pages/0/words/0/0/gt", json={"text": "the"})
+        assert edited.status_code == 200, edited.text
+    finally:
+        client.close()
+
+    successor = _replace_page(seeded_project, "dog")
+    client = _loaded_client(tmp_path, seeded_project)
+    try:
+        current = client.get("/api/projects/book1/pages/0")
+        assert current.status_code == 200, current.text
+        assert "dog" in current.json()["page_text_gt"]
+        assert current.json()["history"]["undo_available"] is True
+
+        stepped = client.post("/api/projects/book1/pages/0/undo")
+        assert stepped.status_code == 200, stepped.text
+        assert "the" in stepped.json()["page_text_gt"]
+        assert stepped.json()["history"]["undo_available"] is True
+        assert _slot_id(seeded_project) == original
+
+        rooted = client.post("/api/projects/book1/pages/0/undo")
+        assert rooted.status_code == 200, rooted.text
+        assert "teh" in rooted.json()["page_text_gt"]
+        assert rooted.json()["history"]["undo_available"] is False
+        blocked = client.post("/api/projects/book1/pages/0/undo")
+        assert blocked.status_code == 409
+        assert blocked.json()["error"] == "undo_unavailable"
+
+        redone = client.post("/api/projects/book1/pages/0/redo")
+        assert redone.status_code == 200, redone.text
+        assert "the" in redone.json()["page_text_gt"]
+        forwarded = client.post("/api/projects/book1/pages/0/redo")
+        assert forwarded.status_code == 200, forwarded.text
+        assert "dog" in forwarded.json()["page_text_gt"]
+        assert _slot_id(seeded_project) == successor
+    finally:
+        client.close()
+
+
+@pytest.mark.integration
+def test_rotation_boundary_undo_uses_the_rotate_lineage(tmp_path: Path, seeded_project: Path) -> None:
+    """A rotation replacement is the same slot re-point, tagged ``rotate``."""
+    from pdomain_ocr_labeler_spa.core.page_lineage import lineage_of, retag_boundary_op
+
+    original = _slot_id(seeded_project)
+    client = _loaded_client(tmp_path, seeded_project)
+    try:
+        edited = client.post("/api/projects/book1/pages/0/words/0/0/gt", json={"text": "the"})
+        assert edited.status_code == 200, edited.text
+    finally:
+        client.close()
+
+    successor = _replace_page(seeded_project, "dog", boundary_op="reocr")
+    store = LabelerPageStore(project_dir=seeded_project)
+    try:
+        aggregate = store.get_page(successor)
+        assert retag_boundary_op(aggregate, "rotate") is True
+        store.save_page(aggregate)
+        saved = lineage_of(store.get_page(successor))
+        assert saved is not None
+        assert saved.boundary_op == "rotate"
+        assert saved.previous_page_id == str(original)
+    finally:
+        store.close()
+
+    client = _loaded_client(tmp_path, seeded_project)
+    try:
+        stepped = client.post("/api/projects/book1/pages/0/undo")
+        assert stepped.status_code == 200, stepped.text
+        assert "the" in stepped.json()["page_text_gt"]
+        assert _slot_id(seeded_project) == original
+    finally:
+        client.close()
+
+
+@pytest.mark.integration
+def test_a_new_reocr_on_the_old_aggregate_drops_the_forward_branch(
+    tmp_path: Path, seeded_project: Path
+) -> None:
+    """U-12 linear truncation: redo follows the newest successor only."""
+    from pdomain_ocr_labeler_spa.core.page_lineage import lineage_of, walk_lineage
+
+    client = _loaded_client(tmp_path, seeded_project)
+    try:
+        edited = client.post("/api/projects/book1/pages/0/words/0/0/gt", json={"text": "the"})
+        assert edited.status_code == 200, edited.text
+    finally:
+        client.close()
+
+    dropped = _replace_page(seeded_project, "dog")
+    client = _loaded_client(tmp_path, seeded_project)
+    try:
+        stepped = client.post("/api/projects/book1/pages/0/undo")
+        assert stepped.status_code == 200, stepped.text
+        assert "the" in stepped.json()["page_text_gt"]
+    finally:
+        client.close()
+
+    newest = _replace_page(seeded_project, "fox")
+    client = _loaded_client(tmp_path, seeded_project)
+    try:
+        current = client.get("/api/projects/book1/pages/0")
+        assert "fox" in current.json()["page_text_gt"]
+        stepped = client.post("/api/projects/book1/pages/0/undo")
+        assert stepped.status_code == 200, stepped.text
+        assert "the" in stepped.json()["page_text_gt"]
+        forwarded = client.post("/api/projects/book1/pages/0/redo")
+        assert forwarded.status_code == 200, forwarded.text
+        assert "fox" in forwarded.json()["page_text_gt"]
+        assert "dog" not in forwarded.json()["page_text_gt"]
+    finally:
+        client.close()
+
+    store = LabelerPageStore(project_dir=seeded_project)
+    try:
+        project = store.get_project(_project_uuid("book1"))
+        reached = {aggregate.record.page_id for aggregate in walk_lineage(store, project.record.page_ids)}
+        assert newest in reached
+        assert dropped not in reached
+        current_lineage = lineage_of(store.get_page(project.record.page_ids[0]))
+        assert current_lineage is not None
+        assert current_lineage.previous_page_id is not None
+        previous = lineage_of(store.get_page(UUID(current_lineage.previous_page_id)))
+        assert previous is not None
+        assert previous.superseded_by == str(newest)
+    finally:
+        store.close()
+
+
+@pytest.mark.integration
+def test_prune_keeps_live_and_lineage_reachable_blobs(tmp_path: Path, seeded_project: Path) -> None:
+    """Immediate prune deletes nothing the current slot or its predecessor still needs."""
+    from pdomain_ocr_labeler_spa.core.page_lineage import walk_lineage
+
+    client = _loaded_client(tmp_path, seeded_project)
+    try:
+        edited = client.post("/api/projects/book1/pages/0/words/0/0/gt", json={"text": "the"})
+        assert edited.status_code == 200, edited.text
+    finally:
+        client.close()
+    _replace_page(seeded_project, "dog")
+
+    store = LabelerPageStore(project_dir=seeded_project)
+    try:
+        project = store.get_project(_project_uuid("book1"))
+        kept: set[str] = set()
+        for aggregate in walk_lineage(store, project.record.page_ids):
+            graph = aggregate.record.provenance
+            if graph is None:
+                continue
+            for node in graph.nodes.values():
+                kept.update(node.blob_refs)
+    finally:
+        store.close()
+    assert kept
+    stray = seeded_project / ".pd-pages" / "blobs" / ("ab" * 32)
+    stray.write_bytes(b"not-a-content-hash")
+
+    client = _loaded_client(tmp_path, seeded_project)
+    try:
+        pruned = client.post("/api/projects/book1/maintenance/prune")
+        assert pruned.status_code == 200, pruned.text
+        assert pruned.json()["deleted_count"] == 0
+    finally:
+        client.close()
+
+    assert stray.is_file()
+    for digest in kept:
+        assert (seeded_project / ".pd-pages" / "blobs" / digest).is_file()
+
+
+@pytest.mark.integration
+def test_a_missing_boundary_blob_does_not_move_the_slot(tmp_path: Path, seeded_project: Path) -> None:
+    """The slot stays put when the target content blob cannot be read."""
+    from pdomain_ocr_labeler_spa.core.page_lineage import lineage_of
+
+    client = _loaded_client(tmp_path, seeded_project)
+    try:
+        edited = client.post("/api/projects/book1/pages/0/words/0/0/gt", json={"text": "the"})
+        assert edited.status_code == 200, edited.text
+    finally:
+        client.close()
+
+    successor = _replace_page(seeded_project, "dog")
+    store = LabelerPageStore(project_dir=seeded_project)
+    try:
+        lineage = lineage_of(store.get_page(successor))
+        assert lineage is not None
+        assert lineage.previous_page_id is not None
+        previous = store.get_page(UUID(lineage.previous_page_id))
+        graph = previous.record.provenance
+        assert graph is not None
+        head = graph.head
+        assert head is not None
+        assert head.blob_refs
+        (seeded_project / ".pd-pages" / "blobs" / head.blob_refs[0]).unlink()
+    finally:
+        store.close()
+
+    client = _loaded_client(tmp_path, seeded_project)
+    try:
+        stepped = client.post("/api/projects/book1/pages/0/undo")
+        assert stepped.status_code == 500, stepped.text
+        assert stepped.json()["error"] == "restore_failed"
+        assert _slot_id(seeded_project) == successor
+        current = client.get("/api/projects/book1/pages/0")
+        assert current.status_code == 200, current.text
+        assert "dog" in current.json()["page_text_gt"]
+    finally:
+        client.close()
+
+
+@pytest.mark.integration
+def test_rotate_undo_restores_the_source_image(tmp_path: Path, seeded_project: Path) -> None:
+    """A rotate cross writes the target aggregate's OCR image back, even after an edit.
+
+    The edit becomes the head and stores only page JSON. The image hash stays
+    on the ingest node.
+    """
+    from pdomain_ocr_labeler_spa.core.page_lineage import lineage_of, retag_boundary_op
+
+    image = seeded_project / "001.png"
+    original = image.read_bytes()
+    client = _loaded_client(tmp_path, seeded_project)
+    try:
+        edited = client.post("/api/projects/book1/pages/0/words/0/0/gt", json={"text": "the"})
+        assert edited.status_code == 200, edited.text
+    finally:
+        client.close()
+
+    successor_bytes = b"successor-image-bytes"
+    successor = _replace_page(seeded_project, "dog", image_bytes=successor_bytes)
+    store = LabelerPageStore(project_dir=seeded_project)
+    try:
+        aggregate = store.get_page(successor)
+        assert retag_boundary_op(aggregate, "rotate") is True
+        store.save_page(aggregate)
+        lineage = lineage_of(store.get_page(successor))
+        assert lineage is not None
+        assert lineage.previous_page_id is not None
+        previous = store.get_page(UUID(lineage.previous_page_id))
+        previous_graph = previous.record.provenance
+        assert previous_graph is not None
+        previous_head = previous_graph.head
+        assert previous_head is not None
+        assert len(previous_head.blob_refs) == 1
+    finally:
+        store.close()
+    image.write_bytes(b"rotated-on-disk")
+
+    client = _loaded_client(tmp_path, seeded_project)
+    try:
+        stepped = client.post("/api/projects/book1/pages/0/undo")
+        assert stepped.status_code == 200, stepped.text
+        assert image.read_bytes() == original
+        forwarded = client.post("/api/projects/book1/pages/0/redo")
+        assert forwarded.status_code == 200, forwarded.text
+        assert image.read_bytes() == successor_bytes
+    finally:
+        client.close()
+
+
+@pytest.mark.integration
+def test_reocr_undo_leaves_the_source_image_in_place(tmp_path: Path, seeded_project: Path) -> None:
+    """A re-OCR cross restores page JSON and does not rewrite the source image."""
+    image = seeded_project / "001.png"
+    _replace_page(seeded_project, "dog")
+    image.write_bytes(b"scan-stays")
+
+    client = _loaded_client(tmp_path, seeded_project)
+    try:
+        stepped = client.post("/api/projects/book1/pages/0/undo")
+        assert stepped.status_code == 200, stepped.text
+        assert image.read_bytes() == b"scan-stays"
+    finally:
+        client.close()

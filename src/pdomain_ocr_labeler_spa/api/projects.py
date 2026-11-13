@@ -631,6 +631,18 @@ def load_project(
             request.app.state.page_store = new_store
             runner.context["page_store"] = new_store
             log.debug("load_project: LabelerPageStore initialized at %s/.pd-pages/", resolved)
+            if settings.prune_on_open:
+                try:
+                    from ..core.page_prune import prune_store
+
+                    prune_store(
+                        new_store,
+                        project.project_id,
+                        retention_days=settings.prune_retention_days,
+                        undo_depth=settings.undo_depth,
+                    )
+                except Exception:
+                    log.warning("load_project: prune-on-open failed (continuing)", exc_info=True)
         except Exception as exc:
             log.warning("load_project: LabelerPageStore init failed (continuing): %s", exc)
 

@@ -644,12 +644,11 @@ def test_page3_edit_gt_text(exercise_server: ExerciseServer, page: Page) -> None
 
 @pytest.mark.e2e
 def test_page3_word_dialog_nudge(exercise_server: ExerciseServer, page: Page) -> None:
-    """Page 3: verify word-edit dialog testids are in DOM; open via worklist selection.
+    """Page 3: open the mounted right-panel editor from a worklist row.
 
-    ``edit-word-button-*`` lives in the ``WordMatchView`` hidden virtualizer
-    container and cannot be clicked via normal Playwright locators.
-    We verify dialog testids exist in the DOM, and exercise the word-selection
-    path via the worklist row → right-panel word detail.
+    ``edit-word-button-*`` lives in the ``WordMatchView`` virtualizer and
+    is not the click this test uses. The worklist row selects the line and
+    the right panel shows ``word-detail``, ``line-detail``, or ``bbox-section``.
     """
     _goto_project_page(page, exercise_server.base_url, 3)
     _wait_for_line_cards(page)
@@ -666,14 +665,15 @@ def test_page3_word_dialog_nudge(exercise_server: ExerciseServer, page: Page) ->
     first_row.click()
     time.sleep(0.5)
 
-    # The right-panel-body should be visible with word/line detail.
     right_body = page.locator('[data-testid="right-panel-body"]').first
     right_body.wait_for(state="visible", timeout=10_000)
-
-    # Verify the key bbox-section testids exist in DOM (right panel or dialog).
-    # bbox-section is present when a word is selected in the right panel.
-    # If no bbox-section yet (line-level selection), that's also acceptable.
     assert right_body.is_visible(), "right-panel-body must be visible"
+    assert page.locator('[data-testid="word-edit-dialog"]').count() == 0
+
+    editor = page.locator(
+        '[data-testid="word-detail"], [data-testid="line-detail"], [data-testid="bbox-section"]'
+    )
+    assert editor.count() > 0, "the mounted right-panel editor must be present"
     time.sleep(0.2)
 
 

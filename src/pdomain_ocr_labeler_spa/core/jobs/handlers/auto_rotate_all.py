@@ -51,6 +51,7 @@ from typing import TYPE_CHECKING, Any
 import cv2
 import numpy as np
 
+from ...page_lineage import retag_boundary_op
 from ..publication import job_change_broker
 
 if TYPE_CHECKING:
@@ -320,6 +321,7 @@ async def handle_auto_rotate_all(runner: JobRunner, job: Job) -> None:
                     if page_id is not None:
                         try:
                             agg = store.get_page(page_id)
+                            retag_boundary_op(agg, "rotate")
                             agg.rotation_updated(degrees=chosen, source="auto")
                             store.save_page(agg)
                         except Exception as exc:  # pragma: no cover - defensive

@@ -262,8 +262,8 @@ describe("PageActionsCompact: OCR config trigger (#405)", () => {
   });
 });
 
-// H-D (event-store undo U-6): Reload OCR now routes through a confirm dialog
-// that warns the page's edit history resets. The compact component opens the
+// U-M6: Reload OCR routes through a confirm dialog that says undo will step
+// back across the reload. The compact component opens the
 // confirm via dialogStore; tests approve it directly (no ConfirmDialog is
 // mounted in this harness).
 function approveReloadOcrConfirm() {

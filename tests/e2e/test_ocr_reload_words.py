@@ -142,8 +142,8 @@ def test_ocr_reload_refreshes_page_data(running_server: str, page: Page) -> None
     reload_btn.wait_for(state="visible", timeout=5_000)
     reload_btn.click()
 
-    # H-D (event-store undo U-6): Reload OCR now opens a confirm dialog
-    # warning that the page's edit history resets. Approve it.
+    # U-M6: Reload OCR opens a confirm that says undo steps back across
+    # the reload. Approve it.
     confirm_btn = page.locator('[data-testid="confirm-dialog-confirm"]')
     confirm_btn.wait_for(state="visible", timeout=5_000)
     confirm_btn.click()
@@ -195,8 +195,8 @@ def test_ocr_reload_api_returns_line_matches(running_server: str, page: Page) ->
     reload_btn.wait_for(state="visible", timeout=5_000)
     reload_btn.click()
 
-    # H-D (event-store undo U-6): Reload OCR now opens a confirm dialog
-    # warning that the page's edit history resets. Approve it.
+    # U-M6: Reload OCR opens a confirm that says undo steps back across
+    # the reload. Approve it.
     confirm_btn = page.locator('[data-testid="confirm-dialog-confirm"]')
     confirm_btn.wait_for(state="visible", timeout=5_000)
     confirm_btn.click()

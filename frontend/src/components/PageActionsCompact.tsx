@@ -590,10 +590,10 @@ export function PageActionsCompact({ projectId, pageIndex }: PageActionsCompactP
       regionsProgress.status !== "complete" &&
       regionsProgress.status !== "error");
 
-  // U-6 (spec 2026-06-12-event-store-undo): re-OCR creates a NEW page
-  // aggregate — the undo history resets. Confirm before enqueueing.
+  // U-M6: re-OCR replaces the page aggregate. Undo steps back across that
+  // boundary. Confirm before enqueueing.
   const reloadOcrConfirmBody =
-    "This will re-run OCR for the current page and the page's edit history resets — Undo will not step back across this reload.";
+    "This will re-run OCR for the current page. Undo will step back across this reload.";
 
   function handleReloadOcr() {
     dialogStore.openConfirm({

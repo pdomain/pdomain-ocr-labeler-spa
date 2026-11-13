@@ -3,7 +3,7 @@ kind: behavior-flow-spec
 status: active
 owner: maintainers
 created: 2026-06-01
-last_verified: 2026-07-13
+last_verified: 2026-11-12
 ---
 
 # Cross-unit flows - pdomain-ocr-labeler-spa
@@ -38,16 +38,15 @@ last_verified: 2026-07-13
 
 ### F-DRIVER-OPEN-EDIT-01 - Driver opens legacy route and reaches edit controls
 
-- **Units:** driver contract -> project page -> hidden/visible controls -> word
-  edit dialog
+- **Units:** driver contract -> project page -> word cell -> right panel
 - **Steps (record IDs in order):**
   1. B-DRIVER-002 - legacy route resolves to canonical project page.
   2. B-DRIVER-001 - required driver test IDs are present or stubbed.
-  3. B-ACTIONS-005 - word edit dialog can be opened for a word.
+  3. B-ACTIONS-005 - the pencil opens the right-panel word editor.
 - **Expected end state (UI + backend):** Driver can still locate its stable
-  selectors and open a real editable word workflow.
+  selectors and open the mounted word editor.
 - **Bad-state / error:** Hidden stubs alone are insufficient: the flow fails if
-  no visible or actionable path opens the dialog.
+  no visible path opens `word-detail`.
 - **Tier(s):** A
 - **Regression:** no
 - **Test:** -
@@ -162,28 +161,28 @@ last_verified: 2026-07-13
 - **Regression:** no
 - **Test:** -
 
-### F-WORD-DIALOG-IMAGE-01 - Stage image edits in word dialog
+### F-WORD-DIALOG-IMAGE-01 - Stage image edits in the right panel
 
-- **Units:** word edit dialog -> word image canvas -> local draft
+- **Units:** right panel -> word geometry sections -> local draft
 - **Steps (record IDs in order):**
-  1. B-ACTIONS-005 - open the word edit dialog.
-  2. B-ACTIONS-014 - stage image/geometry edits.
-- **Expected end state (UI + backend):** Local draft shows staged edits until
-  user applies or discards.
-- **Bad-state / error:** Discard resets local draft without posting.
+  1. B-ACTIONS-005 - open the right-panel word editor.
+  2. B-ACTIONS-014 - stage geometry edits.
+- **Expected end state (UI + backend):** The local draft shows staged edits
+  until the user applies or discards them.
+- **Bad-state / error:** Discard resets the local draft without posting.
 - **Tier(s):** A
 - **Regression:** no
 - **Test:** -
 
-### F-WORD-DIALOG-MUTATE-01 - Apply word dialog mutation
+### F-WORD-DIALOG-MUTATE-01 - Apply a right-panel word edit
 
-- **Units:** word edit dialog -> word endpoints -> page query
+- **Units:** right panel -> word endpoints -> page query
 - **Steps (record IDs in order):**
-  1. B-ACTIONS-005 - open the word edit dialog.
+  1. B-ACTIONS-005 - open the right-panel word editor.
   2. B-ACTIONS-015 - apply a mutation.
-- **Expected end state (UI + backend):** Page data invalidates/refetches and
-  dialog remains recoverable.
-- **Bad-state / error:** Failure keeps draft open.
+- **Expected end state (UI + backend):** Page data invalidates and refetches.
+  Character-range mutations are not part of this flow.
+- **Bad-state / error:** Failure keeps the draft in the panel.
 - **Tier(s):** A+B
 - **Regression:** no
 - **Test:** -

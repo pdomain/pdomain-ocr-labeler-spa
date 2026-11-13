@@ -857,6 +857,7 @@ def _build_history_info(
     the frontend keeps both buttons disabled.
     """
     from ..core.page_history import derive_history
+    from ..core.page_lineage import history_offers, lineage_of
 
     try:
         agg = store.get_page(page_id)
@@ -867,9 +868,16 @@ def _build_history_info(
     if graph is None:
         return None
     state = derive_history(graph, depth=depth)
-    return PageHistoryInfo(
+    undo_available, redo_available = history_offers(
         undo_available=state.undo_available,
         redo_available=state.redo_available,
+        cursor=state.cursor,
+        chain_length=len(state.chain),
+        lineage=lineage_of(agg),
+    )
+    return PageHistoryInfo(
+        undo_available=undo_available,
+        redo_available=redo_available,
         cursor=state.cursor,
         depth=depth,
     )

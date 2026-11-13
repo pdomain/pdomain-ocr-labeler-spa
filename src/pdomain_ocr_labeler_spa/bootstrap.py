@@ -57,6 +57,7 @@ from .api.history import install_history_router
 from .api.jobs import install_jobs_router
 from .api.label_vocabulary import install_label_vocabulary_router
 from .api.lines_paragraphs import install_lines_paragraphs_router
+from .api.maintenance import install_maintenance_router
 from .api.middleware.error_handler import install_error_handlers
 from .api.middleware.request_id import RequestIdMiddleware
 from .api.notifications import install_notifications_router
@@ -596,6 +597,7 @@ def build_app(settings: Settings | None = None) -> FastAPI:
     # /api/projects/{id}/pages/{idx}/undo|redo — event-store undo
     # (docs/specs/2026-06-12-event-store-undo.md, slice H-B).
     install_history_router(app)
+    install_maintenance_router(app)
 
     # /api/jobs/* router — issue #185 (SSE for long-running operations).
     install_jobs_router(app)

@@ -29,20 +29,6 @@ Build these in this repository.
 - Finish suggestion accept and edit, and predecessor-based compensating undo, for the shipped typography journal. Phase
   one is in [typography review](../architecture/31-typography-review.md). The open design questions are in
   [`OPEN_QUESTIONS.md`](../../OPEN_QUESTIONS.md).
-- Reconcile browser coverage of driver-contract section 2.11 with the retired word-edit dialog. Commit `8391cddc`
-  aligns the driver and shell docs with the mounted components. `tests/e2e/test_project_page_smoke.py` still opens
-  the removed dialog. GitHub issue #454 is already deleted.
-- Finish U-M6 history: cross-OCR and rotation-boundary traversal, page-slot lineage, and conservative pruning. U-M7
-  listing and jumps already ship. The design remains in the [undo spec](../specs/2026-06-12-event-store-undo.md).
-- Stop one `set_region_word_membership` write from renumbering every word on the page. `stable_word_id` hashes a
-  page-wide reading order, and a region joins `page.lines`. So the write detaches typography journal rows keyed to the
-  old ids. The docstring in `api/regions.py` records that. `tests/integration/test_region_membership_word_identity.py`
-  pins today's behavior. This is outside the sidecar-reindex family closed on 2026-09-18. Line merge, split, and delete
-  already renumber `page.lines` the same way.
-- Reconcile behavior specs with the shipped UI. `docs/specs/behavior/component-dialogs-actions.md` still describes the
-  removed word-edit dialog and character-range mutations. `docs/specs/behavior/unclear-items.md` still questions
-  page-level erase, while `erase_page_pixels` exists. Check [`decisions.md`](decisions.md) before treating an unclear
-  item as open.
 
 ## Next
 
@@ -135,6 +121,19 @@ Auth, S3, Postgres, and managed adapters stay deferred under D-042 until there i
   2026-11-11, and the owner has not reviewed it.
 - **Aligned driver and shell docs with mounted components.** Commit `8391cddc` removes the retired word-edit dialog
   from the architecture docs and points erase mode at `rail-mode-erase`.
+- **Drove driver-contract section 2.11 through the right panel.** The project-page smoke test clicks the pencil and
+  waits for `word-detail`. The real-project exercise opens that panel from a worklist row. Neither test opens the
+  retired modal.
+- **Shipped U-M6 history boundaries.** Undo and redo follow page-slot lineage across a re-OCR or rotation boundary.
+  A jump stays inside the active chain. `POST /api/projects/{project_id}/maintenance/prune` deletes only blobs the
+  undo spec marks dead. U-M7 listing and jumps are unchanged. Coverage is
+  `tests/integration/test_history_undo_redo.py` and `tests/unit/core/test_page_prune.py`.
+- **Kept word ids across one region membership write.** The write stamps each word's reading order before it moves
+  words, so typography journal rows stay on the same ids. Line merge, split, and delete still renumber `page.lines`.
+  Coverage is `tests/integration/test_region_membership_word_identity.py`.
+- **Reconciled the behavior specs with the mounted editor.** `docs/specs/behavior/component-dialogs-actions.md`
+  describes the right panel. Character-range mutations are not a current write. Page-level erase is
+  `erase_page_pixels`, so it is no longer an open question in `docs/specs/behavior/unclear-items.md`.
 
 ## Deferred
 

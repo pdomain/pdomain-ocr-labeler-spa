@@ -236,8 +236,8 @@ describe("ProjectPage: Reload confirm copy (U-7)", () => {
   });
 });
 
-describe("ProjectPage: Reload-OCR confirm warns history resets (U-6/H-D)", () => {
-  it("Mod+R opens a confirm whose copy mentions edit history; POST only on confirm", async () => {
+describe("ProjectPage: Reload-OCR confirm offers the boundary undo (U-M6)", () => {
+  it("Mod+R opens a confirm whose copy offers the boundary undo; POST only on confirm", async () => {
     stubBackend(null);
     const reloadSpy = vi.fn(() => HttpResponse.json({ job_id: "j1" }, { status: 202 }));
     server.use(http.post("/api/projects/p1/pages/0/reload-ocr", reloadSpy));
@@ -250,7 +250,7 @@ describe("ProjectPage: Reload-OCR confirm warns history resets (U-6/H-D)", () =>
       expect(screen.getByTestId("confirm-dialog")).toBeInTheDocument();
     });
     const dialogText = screen.getByTestId("confirm-dialog").textContent ?? "";
-    expect(dialogText).toMatch(/history/i);
+    expect(dialogText).toMatch(/step back across this reload/i);
     expect(reloadSpy).not.toHaveBeenCalled();
 
     fireEvent.click(screen.getByTestId("confirm-dialog-confirm"));

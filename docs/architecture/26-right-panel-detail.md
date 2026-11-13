@@ -3,7 +3,7 @@ kind: architecture
 status: built
 owner: maintainers
 created: 2026-05-16
-last_verified: 2026-07-13
+last_verified: 2026-11-12
 ---
 
 # 26 — Right Panel Detail Views
@@ -173,15 +173,18 @@ typography-review query; stale `409` invalidates only that word head.
 
 ### dialog-store
 
-All dialogs are managed via a single imperative store:
+Dialogs other than word editing use one imperative store. Word editing is the right panel.
 
 ```typescript
-type SimpleDialogKey = "ocrConfig" | "export" | "hotkeyHelp" | "sourceFolder";
-// Also: wordEdit (with lineIdx/wordIdx params), confirm (with title/body/onConfirm)
+type SimpleDialogKey =
+  | "ocrConfig"
+  | "export"
+  | "hotkeyHelp"
+  | "sourceFolder"
+  | "pageKinds";
 ```
 
-`dialogStore.openWordEdit({ lineIdx, wordIdx })` and
-`dialogStore.openConfirm({ title, body, onConfirm })` are the compound openers.
+`dialogStore.openConfirm({ title, body, onConfirm })` opens the confirm dialog. The store has no word-edit opener.
 
 ## 5. Interactions and behaviors
 

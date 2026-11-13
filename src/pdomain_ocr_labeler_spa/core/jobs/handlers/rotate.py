@@ -34,6 +34,7 @@ import logging
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from ...page_lineage import retag_boundary_op
 from ..publication import job_change_broker
 
 if TYPE_CHECKING:
@@ -226,6 +227,7 @@ async def handle_rotate_page(runner: JobRunner, job: Job) -> None:
         if page_id is not None:
             try:
                 agg = store.get_page(page_id)
+                retag_boundary_op(agg, "rotate")
                 agg.rotation_updated(degrees=degrees, source=source)
                 store.save_page(agg)
                 log.debug(

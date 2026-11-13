@@ -69,6 +69,7 @@ from ..core.persistence.page_store import LabelerPageStore
 from ..core.project_state import PageState, ProjectState
 from ..core.regions.block_adapter import preserve_empty_regions
 from ..core.typography_review import TypographyCorrectionLog, stable_page_id, stable_word_id
+from ..core.word_identity import identity_reading_order
 from ..settings import Settings
 from .dependencies import (
     bind_page_labeling_lease,
@@ -1228,7 +1229,7 @@ def _word_merge_has_typography_correction(
     word: Any,
 ) -> bool:
     """Return True when this word's derived word_id has a typography correction."""
-    reading_order = _reading_order_for_word(page, line_index, word_index)
+    reading_order = identity_reading_order(word, _reading_order_for_word(page, line_index, word_index))
     text = str(getattr(word, "text", "") or "")
     word_id = stable_word_id(
         project_id=project.project_id,

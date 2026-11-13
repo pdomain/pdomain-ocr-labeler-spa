@@ -1,19 +1,11 @@
-"""What a membership write does to word identity — a pin, not a fix.
+"""A membership write keeps the word ids it found.
 
-``stable_word_id`` is derived from ``reading_order``, a page-wide positional
-counter over ``page.lines``, and ``TypographyCorrectionLog.head(logical_page_id,
-word_id)`` looks corrections up by that id. A leaf region is a ``WORDS``-typed
-``Block``, and ``Block.lines`` returns ``[self]`` for one, so a region joins
-``page.lines``: moving a word into a region renumbers ``reading_order`` and
-re-keys words that nobody touched.
+``stable_word_id`` hashes a page-wide reading order. A leaf region joins
+``page.lines``, so moving a word would renumber that order. The membership
+route freezes each word's order before the move. ``TypographyCorrectionLog``
+rows stay attached to the ids the page still publishes.
 
-**This fragility is pre-existing and is owned elsewhere.** ``api/lines_paragraphs.py``
-already restructures ``page.lines`` on merge, split and delete, so the region
-routes add a new trigger, not the flaw. Re-keying word identity off something
-stable (the bounding-box signature ``ResolvedRegion.member_word_signatures``
-already uses) is a different plan's work. These tests exist so the next person
-to touch either side finds the interaction stated, measured, and un-silent —
-delete them only together with the keying.
+Line merge, split, and delete still renumber. An empty region does not.
 """
 
 from __future__ import annotations
@@ -139,13 +131,8 @@ def test_creating_an_empty_region_leaves_every_word_id_alone(toolbar_loaded: Any
     assert _word_ids_by_text(client.get(_BASE).json()) == before
 
 
-def test_a_membership_write_re_keys_every_word_on_the_page(toolbar_loaded: Any) -> None:
-    """Observed behaviour, stated exactly: moving the page's *first* word into a
-    region changes the ``word_id`` of **every** word on the page, not only the one
-    that moved and not only the words after it. The region sorts into
-    ``page.lines`` as its own line, the moved word lands at the end of the
-    page-wide ``reading_order`` counter, and every other word shifts up by one.
-    """
+def test_a_membership_write_keeps_every_word_id(toolbar_loaded: Any) -> None:
+    """Moving the page's first word into a region leaves every published id."""
     client, _ps, page = toolbar_loaded
     before = _word_ids_by_text(client.get(_BASE).json())
     region_id = _make_region(client)
@@ -156,20 +143,13 @@ def test_a_membership_write_re_keys_every_word_on_the_page(toolbar_loaded: Any) 
     assert moved.status_code == 200, moved.text
 
     after = _word_ids_by_text(client.get(_BASE).json())
-    assert set(after) == set(before), "no word was lost — only its published id changed"
-    changed = {text for text in before if after[text] != before[text]}
-    assert changed == set(before), f"expected every word re-keyed, got {sorted(changed)}"
-    # Nothing about the page's *text* changed; the words are all still there.
+    assert set(after) == set(before)
+    assert after == before
     assert {w.text for w in page.words} == set(before)
 
 
-def test_a_recorded_typography_correction_detaches_from_its_word(toolbar_loaded: Any) -> None:
-    """The consequence that matters: a correction recorded against a word before
-    the membership write is no longer reachable from that word afterwards. The
-    journal keeps it — nothing is lost on disk — but it is now filed under an id
-    no word on the page carries. ``head`` for the word's *new* id is ``None``: the
-    reviewer sees an unreviewed word and the correction becomes invisible.
-    """
+def test_a_recorded_typography_correction_stays_on_its_word(toolbar_loaded: Any) -> None:
+    """A correction recorded before the membership write is still that word's head."""
     client, project_state, _page = toolbar_loaded
     project_root = Path(project_state.loaded_project.project_root)
     page_id = stable_page_id(project_id="book1", page_index=0)
@@ -194,10 +174,6 @@ def test_a_recorded_typography_correction_detaches_from_its_word(toolbar_loaded:
     )
 
     after = _word_ids_by_text(client.get(_BASE).json())
-    new_id = after["three"]
-    assert new_id != original_id
-    # The record survives — under an id the page no longer uses.
+    assert after["three"] == original_id
+    assert original_id in set(after.values())
     assert log.head(page_id, original_id) is not None
-    assert original_id not in set(after.values())
-    # And the word it described now reads as having no correction at all.
-    assert log.head(page_id, new_id) is None

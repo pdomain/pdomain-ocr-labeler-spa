@@ -197,9 +197,10 @@ See the 2026-09-18 tombstones in `decisions.md` for what each triage found.
 The live list is the [roadmap](intent-map.md). This section only names what is in progress now.
 
 Typography suggestion acceptance and predecessor undo are still open. The questions are in
-[`OPEN_QUESTIONS.md`](../../OPEN_QUESTIONS.md). Browser coverage of driver-contract section 2.11 still opens the
-removed word-edit dialog. U-M6 history boundaries remain open. One region-membership write can still renumber every
-word on the page.
+[`OPEN_QUESTIONS.md`](../../OPEN_QUESTIONS.md).
+
+Driver-contract section 2.11 browser coverage, U-M6 history boundaries, stable region-membership word ids, and the
+behavior-spec reconcile are recorded under Done in the roadmap.
 
 Closed waves, the six findings, the sidecar reindex, the memfd refusal, glyph-picker parity, export-dialog history,
 the local right-panel frame, and test-project `noUncheckedIndexedAccess` are recorded under Done in the roadmap and

@@ -106,8 +106,8 @@ Summary of what closed 2026-09-18 (full reasoning in
   closed.
 - Test-project `noUncheckedIndexedAccess` is on as of 2026-11-11.
 - Export history, the local right-panel frame, and the driver docs landed on
-  2026-11-11. Browser coverage of driver-contract section 2.11 is still open.
-  A shared workbench layout was decided against.
+  2026-11-11. Browser coverage of driver-contract section 2.11 drives the
+  mounted right-panel editor. A shared workbench layout was decided against.
 
 Per-slice history is preserved in git log and GitHub closed milestones.
 

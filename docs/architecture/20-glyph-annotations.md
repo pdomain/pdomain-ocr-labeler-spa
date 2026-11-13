@@ -3,7 +3,7 @@ kind: architecture
 status: built
 owner: maintainers
 created: 2026-11-07
-last_verified: 2026-11-07
+last_verified: 2026-11-12
 ---
 
 # 20 — Glyph annotations
@@ -45,8 +45,9 @@ stored, and the panel names them the same way as current marks. The legacy long-
 
 PageState carries positional glyph sidecar maps. Content blobs preserve them through `labeler_sidecars`; this
 replaced the original proposed envelope-version bump. Structural edit routes reindex sidecars so marks follow their
-words. Word split refuses to orphan existing sidecars. Region membership's line-renumbering identity gap remains
-separate unresolved work.
+words. Word split refuses to orphan existing sidecars. A region membership write stamps each word's reading order
+before it moves words, so typography rows stay on the same word ids. Line merge, split, and delete still renumber
+`page.lines`.
 
 Dataset export writes `recognition/glyph_features.json`, keyed by crop id, so confirmed human marks reach
 recognition evaluation. The export does not require a prediction producer.

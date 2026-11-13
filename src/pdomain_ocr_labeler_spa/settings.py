@@ -525,6 +525,14 @@ class Settings(BaseSettings):
     (``PDLABELER_UNDO_DEPTH``). Older versions remain in the event store but
     stop being reachable via the undo button. Default 50 (spec U-8)."""
 
+    prune_retention_days: int = 30
+    """Days a truncated redo branch, or an abandoned page aggregate, keeps
+    its content blobs (``PDLABELER_PRUNE_RETENTION_DAYS``). Default 30."""
+
+    prune_on_open: bool = False
+    """When True, loading a project runs the maintenance prune
+    (``PDLABELER_PRUNE_ON_OPEN``). Default False. Prune never runs on a write."""
+
     # ── Error-handler debug surface (docs/architecture/02-backend.md §8 / D-040) ─────────
     # Q-A11 (resolved 2026-05-07, option B): the unhandled-`Exception`
     # 500 envelope's ``details`` field surfaces the last 3 traceback

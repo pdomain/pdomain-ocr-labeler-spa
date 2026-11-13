@@ -50,6 +50,7 @@ from ..core.typography_review import (
     typography_reviewed,
 )
 from ..core.typography_review_counts import append_typography_review_counts_best_effort
+from ..core.word_identity import identity_reading_order
 from .dependencies import bind_page_labeling_lease, get_project_state
 
 if TYPE_CHECKING:
@@ -485,12 +486,15 @@ def _canonical_word_id_map(
     if state.labeling_bundle is not None:
         return {}
     page_id = _logical_page_id(project, page_index, state)
+    page_words = _page_words(project, page_index, state, page_override)
     identity_texts = _review_identity_texts(project, page_index, state, page_override)
     legacy_texts = _review_words(project, page_index, state, page_override)
     mapping: dict[str, str] = {}
     for index, identity_text in enumerate(identity_texts):
+        word = page_words[index] if page_words is not None and index < len(page_words) else None
+        order = index if word is None else identity_reading_order(word, index)
         current_id = stable_word_id(
-            project_id=project.project_id, page_id=page_id, reading_order=index, text=identity_text
+            project_id=project.project_id, page_id=page_id, reading_order=order, text=identity_text
         )
         legacy_id = stable_word_id(
             project_id=project.project_id, page_id=page_id, reading_order=index, text=legacy_texts[index]
@@ -522,11 +526,11 @@ def _text_validated_word_ids(
         stable_word_id(
             project_id=project.project_id,
             page_id=page_id,
-            reading_order=index,
+            reading_order=identity_reading_order(word, index),
             text=identity_texts[index],
         )
         for index, word in enumerate(page_words)
-        if "validated" in (getattr(word, "word_labels", None) or ())
+        if index < len(identity_texts) and "validated" in (getattr(word, "word_labels", None) or ())
     }
 
 
@@ -635,12 +639,13 @@ def _current_page_content(
         projected_line: list[dict[str, object]] = []
         for word in line:
             text = word if isinstance(word, str) else _word_identity_text(word)
+            order = reading_order if isinstance(word, str) else identity_reading_order(word, reading_order)
             projected_line.append(
                 {
                     "word_id": stable_word_id(
                         project_id=project.project_id,
                         page_id=page_id,
-                        reading_order=reading_order,
+                        reading_order=order,
                         text=text,
                     ),
                     "text": text,
@@ -725,11 +730,14 @@ def _word_text(
     # ``_canonical_word_id_map``.
     id_map = _canonical_word_id_map(project, page_index, state, page_override)
     canonical_word_id = id_map.get(word_id, word_id)
+    page_words = _page_words(project, page_index, state, page_override)
     identity_texts = _review_identity_texts(project, page_index, state, page_override)
     content_texts = _review_words(project, page_index, state, page_override)
     for index, identity_text in enumerate(identity_texts):
+        word = page_words[index] if page_words is not None and index < len(page_words) else None
+        order = index if word is None else identity_reading_order(word, index)
         candidate = stable_word_id(
-            project_id=project.project_id, page_id=page_id, reading_order=index, text=identity_text
+            project_id=project.project_id, page_id=page_id, reading_order=order, text=identity_text
         )
         if candidate == canonical_word_id:
             return content_texts[index]
@@ -746,12 +754,17 @@ def _active_word_ids(
     if bundle is not None:
         return {word.word_id for word in bundle.words}
     page_id = _logical_page_id(project, page_index, state)
+    page_words = _page_words(project, page_index, state, page_override)
     identity_texts = _review_identity_texts(project, page_index, state, page_override)
     return {
         stable_word_id(
             project_id=project.project_id,
             page_id=page_id,
-            reading_order=index,
+            reading_order=(
+                index
+                if page_words is None or index >= len(page_words)
+                else identity_reading_order(page_words[index], index)
+            ),
             text=identity_text,
         )
         for index, identity_text in enumerate(identity_texts)

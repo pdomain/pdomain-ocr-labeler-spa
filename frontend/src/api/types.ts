@@ -897,6 +897,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/projects/{project_id}/maintenance/prune": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Prune Project
+         * @description Delete blobs the undo spec marks dead. Live and lineage-reachable blobs stay.
+         */
+        post: operations["prune_project_api_projects__project_id__maintenance_prune_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/jobs": {
         parameters: {
             query?: never;
@@ -1683,17 +1703,11 @@ export interface paths {
          *     because a region's box is what a person drew, not a function of its
          *     membership.
          *
-         *     Known interaction, owned elsewhere: moving a word changes its published
-         *     ``word_id``. ``stable_word_id`` hashes a page-wide ``reading_order``
-         *     position, and a region joins ``page.lines``, so one membership write
-         *     renumbers every word on the page and detaches any
-         *     ``TypographyCorrectionLog`` record keyed to the old id — the record stays on
-         *     disk under an id no word carries. The flaw is in the keying, not in this
-         *     route: ``api/lines_paragraphs.py``'s merge, split and delete already
-         *     renumber ``page.lines`` the same way, so this route adds a trigger, not the
-         *     fragility. Re-keying word identity off something stable belongs to its own
-         *     plan; ``tests/integration/test_region_membership_word_identity.py`` pins
-         *     exactly what happens today, so the day it changes, it changes visibly.
+         *     Before any word moves, the route freezes each word's current page-wide
+         *     reading order. ``stable_word_id`` hashes that order, and a region joins
+         *     ``page.lines``, so without the freeze one membership write would reissue
+         *     every id and detach ``TypographyCorrectionLog`` rows. Line merge, split,
+         *     and delete still renumber; this route does not.
          */
         put: operations["set_region_word_membership"];
         post?: never;
@@ -6302,6 +6316,14 @@ export interface components {
             parent_ids?: string[];
         };
         /**
+         * PruneResponse
+         * @description How many blob files the maintenance prune deleted.
+         */
+        PruneResponse: {
+            /** Deleted Count */
+            deleted_count: number;
+        };
+        /**
          * ReboxWordRequest
          * @description Spec §2 lines 313-314.
          */
@@ -8937,6 +8959,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HistoryVersionInfo"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    prune_project_api_projects__project_id__maintenance_prune_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PruneResponse"];
                 };
             };
             /** @description Validation Error */

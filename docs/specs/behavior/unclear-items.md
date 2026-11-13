@@ -3,7 +3,7 @@ kind: spec
 status: active
 owner: maintainers
 created: 2026-06-01
-last_verified: 2026-11-06
+last_verified: 2026-11-12
 ---
 
 # Unclear behavior inventory
@@ -31,8 +31,10 @@ implementation decisions before they can be treated as locked behavior.
 - `ProjectPage` does not appear to pass `PageImageCanvas` mutation callbacks for
   selection POST, rebox, add-word, or erase-pixels. Component/backend pieces
   exist, but visible project-page wiring is unclear.
-- Specs mention page-level erase-pixels, while current backend exposes
-  word-anchored `POST .../words/{line}/{word}/erase-pixels`.
+- **Resolved 2026-11-12:** page-level erase exists as
+  `POST /api/projects/{project_id}/pages/{page_index}/erase-pixels`
+  (`erase_page_pixels` in `api/pages.py`). Word-anchored erase remains
+  `POST .../words/{line}/{word}/erase-pixels`.
 - Click outside any bbox is specified in some places as clearing selection;
   current canvas click miss appears to preserve selection.
 - Erase repeated-drag behavior conflicts: some docs say erase remains active,

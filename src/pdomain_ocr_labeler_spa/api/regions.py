@@ -46,6 +46,7 @@ from ..core.regions.layout_structure import reviewed_structure
 from ..core.regions.models import Disposition, RegionDecision, RegionProposal
 from ..core.regions.proposal_log import RegionProposalLog
 from ..core.regions.resolver import is_undecided
+from ..core.word_identity import stamp_page_reading_orders
 from ..settings import Settings
 from .dependencies import (
     bind_page_labeling_lease,
@@ -880,17 +881,11 @@ def set_region_word_membership(
     because a region's box is what a person drew, not a function of its
     membership.
 
-    Known interaction, owned elsewhere: moving a word changes its published
-    ``word_id``. ``stable_word_id`` hashes a page-wide ``reading_order``
-    position, and a region joins ``page.lines``, so one membership write
-    renumbers every word on the page and detaches any
-    ``TypographyCorrectionLog`` record keyed to the old id — the record stays on
-    disk under an id no word carries. The flaw is in the keying, not in this
-    route: ``api/lines_paragraphs.py``'s merge, split and delete already
-    renumber ``page.lines`` the same way, so this route adds a trigger, not the
-    fragility. Re-keying word identity off something stable belongs to its own
-    plan; ``tests/integration/test_region_membership_word_identity.py`` pins
-    exactly what happens today, so the day it changes, it changes visibly.
+    Before any word moves, the route freezes each word's current page-wide
+    reading order. ``stable_word_id`` hashes that order, and a region joins
+    ``page.lines``, so without the freeze one membership write would reissue
+    every id and detach ``TypographyCorrectionLog`` rows. Line merge, split,
+    and delete still renumber; this route does not.
     """
     err = _check_project_and_page(project_id, page_index, project_state)
     if err is not None:
@@ -908,6 +903,8 @@ def set_region_word_membership(
             return _region_not_found(region_id)
         if region.child_type is not BlockChildType.WORDS:
             return _region_not_word_capable(region_id)
+
+        stamp_page_reading_orders(page)
 
         target_words: list[Word] = []
         for ref in body.word_refs:

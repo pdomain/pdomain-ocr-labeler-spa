@@ -103,6 +103,7 @@ from ..core.jobs import JobRunner
 from ..core.persistence.config_yaml import AppConfig
 from ..core.persistence.page_store import LabelerPageStore
 from ..core.project_state import PageState, ProjectState
+from ..core.word_identity import clear_page_reading_orders
 from ..settings import Settings
 from .dependencies import (
     bind_page_labeling_lease,
@@ -605,6 +606,7 @@ def _finalize_structural_edit(
 
     Must be invoked inside the page lock.
     """
+    clear_page_reading_orders(page)
     _auto_rematch_preserving_edits(page=page, project_state=project_state, page_index=page_index)
 
     pstate.generation += 1

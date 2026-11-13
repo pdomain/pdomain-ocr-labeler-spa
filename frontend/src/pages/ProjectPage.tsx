@@ -1076,13 +1076,12 @@ export default function ProjectPage() {
     }
   }
 
-  // U-6 (spec 2026-06-12-event-store-undo): re-OCR creates a NEW page
-  // aggregate, so the undo history restarts. The confirm dialog must warn.
-  // Mod+R wires to this via useGlobalHotkeys (D-050: button is in
+  // U-M6: re-OCR replaces the page aggregate. Undo steps back across that
+  // boundary. Mod+R wires to this via useGlobalHotkeys (D-050: button is in
   // PageActionsCompact; hotkey is retained here so keyboard shortcut works
   // globally even without the button in focus).
   const reloadOcrConfirmBody =
-    "This will re-run OCR for the current page and the page's edit history resets — Undo will not step back across this reload.";
+    "This will re-run OCR for the current page. Undo will step back across this reload.";
   function handleReloadOcr() {
     dialogStore.openConfirm({
       title: "Reload OCR?",
