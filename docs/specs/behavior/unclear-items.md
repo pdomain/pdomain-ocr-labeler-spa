@@ -3,7 +3,7 @@ kind: spec
 status: active
 owner: maintainers
 created: 2026-06-01
-last_verified: 2026-11-12
+last_verified: 2026-11-13
 ---
 
 # Unclear behavior inventory
@@ -13,96 +13,55 @@ implementation decisions before they can be treated as locked behavior.
 
 ## Routes and root
 
-- Legacy `/project/{id}/page/{n}` and bare `/projects/{id}/pages/{n}` route
-  support is documented in driver specs, but current SPA route registration
-  does not obviously include those routes.
-- Unknown project behavior is now redirect-to-root with a warning and
-  `skipSessionRedirect`; older docs mention inline "Project not found".
-- Root filter chips are All, Active, and Complete. Active is every project
-  that is not complete. There is no Archived chip. Archive is omitted
-  (`docs/context/decisions.md`, 2026-09-18).
-- Root project card Delete confirms, then calls `DELETE /api/projects/{id}`
-  and refreshes the list. There is no Archive menu item.
-- Direct bad page URLs such as `/pageno/0`, `/pageno/abc`, or out-of-range
-  values need a canonical redirect/error behavior.
+- Singular `/project/{id}/page/{n}` is supported by backend 301 redirects. The bare plural pages/{n}
+  form is not a registered canonical route. Unknown projects redirect to root.
+- All/Active/Complete filters and permanent confirmed Delete are implemented; Archive remains rejected.
+- Malformed/out-of-range page URL canonicalization still needs an explicit policy; current coercion is
+  not proof of a canonical redirect/error contract.
 
 ## Canvas and viewport
 
-- `ProjectPage` does not appear to pass `PageImageCanvas` mutation callbacks for
-  selection POST, rebox, add-word, or erase-pixels. Component/backend pieces
-  exist, but visible project-page wiring is unclear.
-- **Resolved 2026-11-12:** page-level erase exists as
-  `POST /api/projects/{project_id}/pages/{page_index}/erase-pixels`
-  (`erase_page_pixels` in `api/pages.py`). Word-anchored erase remains
-  `POST .../words/{line}/{word}/erase-pixels`.
-- Click outside any bbox is specified in some places as clearing selection;
-  current canvas click miss appears to preserve selection.
-- Erase repeated-drag behavior conflicts: some docs say erase remains active,
-  current component evidence suggests erase exits after one drag.
-- `ImageTabsHeader` was retired (D-050/D-053) and deleted. Layer controls live
-  in the Rail (`rail-layer-*`); zoom controls in the canvas overlay (`canvas-zoom-*`).
+- Add, rebox and erase callbacks are mounted. Canvas selection is client-owned without a required POST.
+- Page-scoped erase and edited-image OCR are implemented; word-scoped erase is separate.
+- A missed canvas hit preserves selection, and successful erase exits to select. Conflicting clear-on-miss
+  or erase-stays-active expectations remain design discrepancies rather than authority to change code.
+- True polygon lasso fill remains unresolved; current word lasso sends its axis-aligned bounding rectangle.
 
 ## Shell and drawer
 
-- QuickSearch was documented as hotkey/help-only or read-only in older docs, but
-  implementation filters Worklist text and Escape clears it.
-- Rail layer controls were documented as static, but implementation has
-  `useUiPrefs` layer toggles.
-- Rail Bulk was documented as a stub, but current implementation opens drawer to
-  Worklist.
-- Drawer tab persistence is described as persisted with invalid-tab fallback,
-  but current `drawerTab` looks in-memory without a validation path.
-- Some architecture text says inactive breadcrumb `data-active` attributes are
-  absent, while implementation/tests use `data-active="false"`.
+- Search, layer toggles, Bulk-to-Worklist and drawer counts are wired. QuickSearch's keycap focuses input.
+- Browser-local drawer persistence and invalid-tab fallback are not implemented; desired persistence
+  remains an explicit acceptance gap. There is no universal data-active-absent rule across components.
 
 ## Right panel and glyphs
 
-- **Resolved 2026-09-18:** `GlyphAnnotationPanel` is now mounted in
-  `WordDetail`'s "Glyphs" accordion item, wired to
-  `useSetGlyphAnnotations` / `useAcceptGlyphPrediction`
-  (`frontend/src/hooks/useWordMutations.ts`). The real user path is
-  select a word on the canvas, open Glyphs, then mark. See
-  `docs/specs/behavior/component-glyph-annotations.md`.
-- **Resolved 2026-09-18:** word glyph **chip** click handlers (`WordCell.tsx`,
-  under the GT input) now select the word and open the right panel, the same
-  target the pencil (`onEditWord`) button hits — see
-  `docs/context/decisions.md`'s word-edit-dialog retirement entry.
-- BBox Refine/Crop and Rebox Snap currently collapse to simpler/manual rebox
-  behavior. Decide whether to document current stubs or require real endpoints.
-- Erase lasso is sent as an axis-aligned rectangle, not a polygon fill.
-- CharFixer `char_bboxes` are surfaced through refreshed page payloads, but
-  durable process-boundary persistence and downstream export/consumer semantics
-  are still undefined.
-- **Resolved 2026-09-18:** bulk glyph apply now invalidates the page query on
-  a successful apply (`BulkGlyphMarkDialog.tsx`), tested in
-  `BulkGlyphMarkDialog.test.tsx`.
-- **Resolved 2026-09-18:** glyph annotation null/empty/populated state
-  surviving a fresh page-store reload is now proven by
-  `tests/integration/test_glyph_routes.py`'s four
-  `*_persist_across_fresh_store_reload` tests.
+- The word editor is the mounted right panel. Manual glyph writes, chip selection and bulk query
+  invalidation persist; every shared ligature kind has browser coverage definitions. No glyph predictor
+  exists or will be built in this app.
+- BBox Refine/Expand use real scoped jobs; the old Crop action is replaced. Rebox Snap-to-ink still
+  behaves as manual geometry.
+- Char bboxes survive fresh-store reload (`test_char_sidecar_store_roundtrip.py`). CharFixer still
+  synthesizes initial equal boxes; downstream consumers/export semantics remain separate questions.
+- Typography suggestion acceptance/editing and predecessor compensation retain the existing owner choices.
 
 ## Actions, jobs, and persistence
 
-- Rematch GT is synchronous, but earlier docs group it with tracked jobs.
-- Frontend job progress expects `{job_id,status,progress,error_message}` while
-  backend SSE emits `{type,status,current,total,message,error}`.
-- Export dialog cancel appears to call a project-scoped job cancel route, while
-  backend exposes `/api/jobs/{job_id}/cancel`.
-- Reload OCR (Edited) sends `use_edited_image`; backend request model appears to
-  ignore it.
-- ToolbarActionGrid is hidden in `ProjectPage`, and its handler mainly
-  invalidates the page. Decide whether to capture current stub behavior or the
-  intended real action mapping.
-- **Resolved 2026-11-12:** word edits are the mounted right-panel editor
-  (`word-detail` inside `right-panel`). `WordEditDialog` is not mounted, and
-  character-range mutations are not a current write. See
-  `docs/specs/behavior/component-dialogs-actions.md`.
-- Auto-save `SaveStatus` and `image_drift` recovery are documented, but active
-  frontend state wiring was not found.
-- Rotation handler job plumbing exists, but real image rotation/OCR/save effects
-  are explicitly stubbed.
-- OCR config sidecar save failures are logged/swallowed while live config still
-  applies; confirm whether users need stronger visible feedback.
+- Jobs SSE uses public Job-plus-event; canonical export cancellation is `/api/jobs/{job_id}/cancel`.
+  `test_jobs_wire_contract.py` and useJobProgress.test.tsx cover the wire boundary.
+- The toolbar is visible and dispatches real actions. Rotation changes pixels, reruns OCR and persists
+  metadata; it is not a stub. Reload OCR Edited consumes use_edited_image.
+- GET image-drift detection and its warning banner are wired. Save-time refusal/automatic recovery and
+  a universal SaveStatus workflow remain unimplemented acceptance, not shipped behavior.
+- OCR configuration sidecar failures can leave live configuration applied with logged persistence
+  failures; the strength of user-visible feedback remains a product question.
+- Global jobs history and the full combined browser open/edit/save/export flow are not proved by
+  separate component/integration tests.
+
+## Evidence update (2026-11-13)
+
+Fresh source/test analysis checked ProjectPage, PageImageCanvas, Rail, QuickSearch, WordDetail,
+BBoxSection, the edited-image OCR job, rotation handlers and the corresponding named test suites.
+This separates resolved wiring from residual acceptance without claiming a new full browser exercise.
 
 ## Adversarial Review
 

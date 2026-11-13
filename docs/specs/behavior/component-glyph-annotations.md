@@ -3,7 +3,7 @@ kind: spec
 status: active
 owner: maintainers
 created: 2026-06-01
-last_verified: 2026-09-18
+last_verified: 2026-11-13
 ---
 
 # Behavior unit spec - Glyph annotations
@@ -136,6 +136,12 @@ last_verified: 2026-09-18
   `test_glyph_annotations_cleared_removes_entry_across_fresh_store_reload`,
   and `test_glyph_bulk_mark_apply_persists_across_fresh_store_reload` — each
   closes and reopens the event store between write and read.
+
+## Implementation reconciliation (2026-11-13)
+
+Manual glyph writes are wired through the mounted right panel and persist. Every shared ligature kind
+is covered by `tests/e2e/test_glyph_panel.py::test_every_shared_ligature_kind_is_addable_and_survives_reload`.
+No predictor exists or will be built in this app; generic prediction plumbing is not a delivered workflow.
 
 ## Adversarial Review
 

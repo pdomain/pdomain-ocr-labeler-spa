@@ -3,7 +3,7 @@ kind: context
 status: active
 owner: maintainers
 created: 2026-07-13
-last_verified: 2026-11-12
+last_verified: 2026-11-13
 ---
 
 # Decisions
@@ -13,7 +13,7 @@ last_verified: 2026-11-12
 - **Kind:** context
 - **Status:** active
 - **Owner:** maintainers
-- **Last verified:** 2026-11-12
+- **Last verified:** 2026-11-13
 - **Read when:** looking for durable migration, lifecycle, or changed-direction rationale.
 - **Search terms:** decisions, tombstones, retirement, changed direction, docgraph,
   sidecar durability, char_ranges_map, labeler_sidecars, XDG_CONFIG_HOME,
@@ -2244,3 +2244,22 @@ belong in the sibling repositories named in `30-repository-boundaries.md`.
 
 Agents should change an architecture doc when shipped code and that doc disagree. They should add new product work to
 the intent map instead of extending `specs/16-milestones.md`.
+
+### 2026-11-13 — Architecture retirement pass keeps partial contracts explicit
+
+- **Context:** fresh read-only analyzers compared all indexed docs with code, tests and commit history.
+- **Decision:** current implementation belongs in architecture; completed CharRange/assembly/finding records
+  retire through the [governed receipt](../decisions/2026-11-13-retire-completed-doc-inventories.md).
+- **Rationale:** scaffold/envelope/workflow descriptions no longer match the mounted event-store application.
+  The four design specs and living behavior IDs retain genuine unfinished acceptance rather than being
+  declared complete from helper presence or test coverage alone.
+- **Evidence:** `core/page_prune.py::prune_store`, `api/history.py`,
+  `tests/integration/test_history_undo_redo.py`, `tests/unit/api/test_typography_clean_break.py`,
+  and the current architecture evidence blocks. Boundary traversal is implemented; unreachable successors
+  are outside the prune walk. No policy accepting that under-pruning replaces the original U-M6 contract.
+- **Remaining work:** partial typography/upstream progress, pruning discovery/acceptance and the roadmap's
+  named UI/design discrepancies. RUF002, memfd fallback and local-panel owner-review caveats remain intact.
+
+The July retirement manifest remains the per-document historical audit receipt. The GitHub issue ledger
+remains for its separate deletion-readiness campaign; this pass neither approves #456 policy nor deletes
+remote issues. Its old #454 modal blocker is superseded by mounted right-panel driver coverage.

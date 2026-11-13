@@ -3,7 +3,7 @@ kind: spec
 status: active
 owner: maintainers
 created: 2026-06-01
-last_verified: 2026-07-13
+last_verified: 2026-11-13
 ---
 
 # Behavior unit spec - Canvas and image viewport
@@ -12,7 +12,7 @@ last_verified: 2026-07-13
 - **Address:** `PageImageCanvas`, `BBoxOverlay`, image-viewport controls
 - **UI definition:** none - existing stable UI documented in
   `docs/architecture/04-image-viewport.md`, `21-konva-renderer.md`,
-  `22-page-surface-wireup.md`
+  `24-shell-layout.md`
 - **Parent unit(s):** `screen-project-page.md`, `component-studio-shell.md`
 - **Child unit(s):** right panel, page action toolbar
 - **Shared unit:** yes
@@ -77,6 +77,19 @@ last_verified: 2026-07-13
 
 ### B-CANVAS-004 - Add word and erase modes expose canvas mutation affordances
 
+**Implementation reconciliation (2026-11-13).** The current source/test scope is recorded below.
+The original acceptance fields remain after it; any stronger unimplemented expectation is retained, not waived.
+
+- **Observed trigger:** Use add-word or erase mode and drag on the mounted image canvas.
+- **Current behavior:** ProjectPage passes add/rebox/erase callbacks; successful dispatch reaches the real
+  backend with source-pixel geometry. Page-scoped erase persists pixels and resets mode to View/select.
+- **Residual acceptance:** The older erase-stays-active target differs from current behavior; this migration
+  does not approve that deviation or change code.
+- **Additional evidence:** `frontend/src/pages/ProjectPage.erase.test.tsx`, `ProjectPage.rebox.test.tsx`,
+  `tests/e2e/test_canvas_erase.py`.
+
+**Original acceptance fields:**
+
 - **Flow(s):** -
 - **Composed by:** B-DRAWER-003, B-RIGHT-001
 - **Trigger:** User toggles add-word or erase mode and drags a rectangle on
@@ -96,6 +109,18 @@ last_verified: 2026-07-13
 - **Test:** -
 
 ### B-CANVAS-005 - Drag box selection applies replace, remove, or toggle
+
+**Implementation reconciliation (2026-11-13).** The current source/test scope is recorded below.
+The original acceptance fields remain after it; any stronger unimplemented expectation is retained, not waived.
+
+- **Observed trigger:** Select geometry on the mounted canvas.
+- **Current behavior:** The local selection store changes without requiring a backend selection POST or
+  waiting for a page generation. Shift/control modifiers and mode determine replacement/removal/toggle.
+- **Current limits:** A miss preserves selection in the current implementation; stronger clear-on-miss
+  acceptance must be reconciled explicitly rather than inferred.
+- **Additional evidence:** `frontend/src/components/PageImageCanvas.test.tsx`.
+
+**Original acceptance fields:**
 
 - **Flow(s):** F-LABEL-SAVE-EXPORT-01
 - **Composed by:** B-RIGHT-001, B-DRAWER-002
@@ -163,6 +188,17 @@ last_verified: 2026-07-13
 - **Test:** -
 
 ### B-CANVAS-009 - Erase mode erases pixels from a drag rectangle
+
+**Implementation reconciliation (2026-11-13).** The current source/test scope is recorded below.
+The original acceptance fields remain after it; any stronger unimplemented expectation is retained, not waived.
+
+- **Observed trigger:** Erase pixels through the canvas or right-panel word tool.
+- **Current behavior:** Canvas erase is page-scoped; the right-panel operation is word-scoped. Edited-image
+  OCR consumes the persisted edited pixels. Word lasso currently sends an axis-aligned bounding box.
+- **Residual acceptance:** True polygon fill remains unresolved; do not infer it from a lasso-shaped UI.
+- **Additional evidence:** `tests/e2e/test_canvas_erase.py`, `tests/integration/test_reload_ocr_edited.py`.
+
+**Original acceptance fields:**
 
 - **Flow(s):** -
 - **Composed by:** B-RIGHT-003

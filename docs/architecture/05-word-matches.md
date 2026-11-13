@@ -3,7 +3,7 @@ kind: architecture
 status: built
 owner: maintainers
 created: 2026-05-06
-last_verified: 2026-07-13
+last_verified: 2026-11-13
 ---
 
 # 05 — Word Matches View (Right Pane)
@@ -57,19 +57,10 @@ CodeMirror ([D-008](../../specs/17-decisions.md)).
 
 ## 2. Filter toggle
 
-Single segmented control above the line list:
-
-| Option | data-testid | Filter rule |
-|---|---|---|
-| Unvalidated Lines (default) | `match-filter-unvalidated` | `!line.is_fully_validated` |
-| Mismatched Lines | `match-filter-mismatched` | `line.overall_match_status in {"mismatch", "unmatched_ocr", "unmatched_gt"}` |
-| All Lines | `match-filter-all` | `true` |
-
-State: `usePrefsStore.lineFilter`. Sent to the server as the
-`?line_filter=...` query param so the backend can return only the
-filtered subset.
-
----
+ProjectPage requests the full page and filters line matches in the mounted workbench. TextTabs and WordMatchView
+receive `useUiPrefs.matchFilter`. A mismatch line is any line with a non-exact word, including fuzzy matches;
+it is not limited to mismatch/unmatched enum values. TextTabs mounts Matches, Working GT, P3, F2, Consolidated
+GT and OCR. `lineMatchesFilter.ts` and `TextTabs.test.tsx` define these boundaries.
 
 ## 3. Virtualisation
 
@@ -177,30 +168,9 @@ Three controls per word:
 
 #### Row 2 — Image cell
 
-Two variants:
-
-- **Unmatched-GT** word (`match_status === "unmatched_gt"`): show a
-  `Type` (lucide) icon in blue (`text-blue-600`). No image.
-- **Other**: CSS-clip the page's `original` cached image at the
-  word's bbox.
-
-```tsx
-<div
-  data-testid={`word-image-cell-${l}-${w}`}
-  className="overflow-hidden"
-  style={{
-    width: word.bbox.width * scale,
-    height: word.bbox.height * scale,
-    backgroundImage: `url(${page.image_url})`,
-    backgroundPosition: `-${word.bbox.x * scale}px -${word.bbox.y * scale}px`,
-    backgroundSize: `${page.encoded.display_width}px ${page.encoded.display_height}px`,
-  }}
-/>
-```
-
-This lets all words on a page share one cached image — no per-word
-image fetches. Same algorithm as legacy
-`WordMatchBbox.get_word_image_slice:42`.
+`WordCell` does not render the old CSS image slices and does not consume `imageBaseUrl`. The viewport and
+right-panel image surfaces supply visual context. This heading records the former slot without claiming
+a mounted image cell.
 
 #### Row 3 — OCR text + structural chips
 
@@ -222,32 +192,9 @@ button (`word-tag-clear-button-{l}-{w}-{label}`) that clears the component.
 
 #### Row 4 — GT input
 
-```tsx
-<input
-  type="text"
-  data-testid={`gt-text-input-${l}-${w}`}
-  className="font-mono text-sm w-auto min-w-[40px]"
-  value={draft}
-  onChange={...}
-  onBlur={() => commit(draft)}
-  onKeyDown={(e) => {
-    if (e.key === "Enter") { e.preventDefault(); commit(draft); }
-    else if (e.key === "Tab") {
-      e.preventDefault();
-      commit(draft);
-      focusNeighbour(e.shiftKey ? "prev" : "next");
-    }
-  }}
-  size={Math.max(8, draft.length + 2)}
-/>
-```
-
-`commit(text)` POSTs `update-ground-truth`. Optimistic via
-`useMutation.onMutate` — patches the cached `PagePayload`.
-
-Tab navigation: walks the flat list of GT inputs in reading order
-(line by line, then word by word). Implemented with a `useTabNavigation`
-hook backed by a refs map keyed by `${l}:${w}`.
+WordCell commits GT on Enter by blurring. Escape restores the prior text without blurring. Tab uses native
+focus traversal; the component does not use an explicit Tab-navigation hook. Glyph-chip clicks select the
+word and open the right panel. Canonical typography authoring belongs to TypographySection, not style chips.
 
 #### Row 5 — Status cell
 

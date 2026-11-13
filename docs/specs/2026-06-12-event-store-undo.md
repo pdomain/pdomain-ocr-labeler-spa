@@ -1,5 +1,5 @@
 ---
-last_verified: 2026-11-07
+last_verified: 2026-11-13
 created: 2026-06-12
 owner: maintainers
 kind: spec
@@ -14,6 +14,12 @@ Current scope, verified 2026-11-07: v1 undo/redo and U-M7 visible history and ju
 [Page-history architecture](../architecture/29-page-loading-and-history.md) records that behavior. U-M6
 cross-OCR/rotation traversal, page-slot lineage, and conservative pruning remain open. Older statements that U-M7
 is future work are superseded by commit 44b52257.
+
+**Scope update (2026-11-13).** Boundary undo/redo, page-slot lineage and conservative snapshot pruning ship
+in `66d878c8`. Full U-M6 completion still needs unreachable-successor discovery, expired-prune reload/undo
+acceptance, and the specified restored canvas/worklist/right-panel browser flow. The dated statement above
+and original checklists below are retained as history. Current implementation and verification limits are in
+[page-history architecture](../architecture/29-page-loading-and-history.md).
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development
 > or superpowers:executing-plans to implement this plan slice-by-slice. Each slice is TDD

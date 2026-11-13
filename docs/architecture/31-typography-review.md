@@ -3,7 +3,7 @@ kind: architecture
 status: built
 owner: maintainers
 created: 2026-11-12
-last_verified: 2026-11-12
+last_verified: 2026-11-13
 ---
 
 # Typography review
@@ -13,7 +13,7 @@ last_verified: 2026-11-12
 - **Kind:** architecture
 - **Status:** built
 - **Owner:** maintainers
-- **Last verified:** 2026-11-12
+- **Last verified:** 2026-11-13
 - **Read when:** changing inline typography review, export gates, or the correction journal.
 - **Search terms:** typography review, correction journal, grapheme spans, char ranges, page completion.
 
@@ -65,7 +65,10 @@ trainable. The page-review gate uses this fixed required set, not a bundle taxon
 
 The clean break from legacy character ranges has landed. The OpenAPI schema has no `/char-ranges` path. A legacy
 `char_ranges` payload on a word, and a `char_ranges_map` sidecar, are rejected. The 2026-08-22 inventory found no
-persisted CharRange payloads to migrate.
+persisted CharRange payloads to migrate within its named fixture, corpus and event-store scope.
+That historical scan does not establish absence in unavailable roots or on today's machine.
+The [retirement receipt](../decisions/2026-11-13-retire-completed-doc-inventories.md) preserves its counts,
+root limitation and implementation commits.
 
 ## Not built in this app
 
@@ -81,5 +84,5 @@ rate, context-window rule, and the portable export file format.
 - Tests: `tests/unit/api/test_typography_corrections.py` (`test_rejected_head_blocks_text_and_typography_completion`,
   `test_interleaved_page_global_edits_validate_and_export`) and `tests/unit/api/test_typography_clean_break.py`
   (`test_openapi_contains_no_legacy_char_range_route_or_schema`, `test_word_match_rejects_legacy_char_ranges_payload`, `test_labeler_sidecars_reject_legacy_char_ranges_map`).
-- Inventory: [CharRange deletion inventory](../research/2026-08-22-char-range-deletion-inventory.md).
+- Inventory: [CharRange deletion inventory](../decisions/2026-11-13-retire-completed-doc-inventories.md).
 - Verified: 2026-11-12 by reading those functions and tests. The browser suite was not rerun.

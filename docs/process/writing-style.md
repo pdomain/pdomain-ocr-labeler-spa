@@ -3,7 +3,7 @@ kind: process
 status: active
 owner: maintainers
 created: 2026-05-28
-last_verified: 2026-07-13
+last_verified: 2026-11-13
 ---
 
 # Writing Style

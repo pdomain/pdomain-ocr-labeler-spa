@@ -3,7 +3,7 @@ kind: architecture
 status: built
 owner: maintainers
 created: 2026-05-16
-last_verified: 2026-07-13
+last_verified: 2026-11-13
 ---
 
 # 27 — Right Panel Action Sections
@@ -203,7 +203,8 @@ when the word changes.
   `mode: "expand_then_refine"` (expand, then snap to ink), Expand →
   `mode: "expand_only"` (expand only, no snap; renamed from "Crop" — the
   backend has no image-crop operation). Progress is tracked via
-  `useJobProgress` + `useJobCompletionInvalidation`, same job pattern as
+  the hoisted `useBboxRefineTracking` owner, with completion invalidation rather than component-local polling; the
+  same job pattern as
   `PageActionsCompact`: a loading toast, a success/error toast on the
   terminal event, and invalidation of `["page", projectId, pageIndex]` on
   completion. All three are disabled — with an explanatory message
@@ -458,3 +459,12 @@ cells, not form fields.
 6. **ReboxCanvas "snap" mode**: currently behaves identically to handle-drag
    (no ink-snapping). A future slice would inject an image-luminance probe so
    Snap mode auto-snaps handles to the nearest dark ink region.
+
+## Current persistence and draft boundaries
+
+Char-bbox edits persist in Labeler sidecars within the event-store page content, including across a fresh
+store reload. `test_char_sidecar_store_roundtrip.py` covers that process boundary. CharFixer's initializer
+still synthesizes equal character boxes; durable storage does not prove that the editor reseeds from
+persisted WordMatch.char_bboxes. Focused BBox coordinate text is preserved during refetch, and a cleared
+field is not committed as zero (commit `6b18c9a4`). Snap-to-ink, true polygon lasso fill and downstream
+char-bbox consumers remain separate limitations; typography suggestion/undo choices remain open.

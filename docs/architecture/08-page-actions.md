@@ -3,7 +3,7 @@ kind: architecture
 status: built
 owner: maintainers
 created: 2026-05-06
-last_verified: 2026-11-12
+last_verified: 2026-11-13
 ---
 
 # 08 — Page Actions
@@ -87,59 +87,20 @@ button when `has_edited_image` is false (read from `PagePayload`).
 
 ## 4. Save Page
 
-Synchronous. `POST /api/projects/{id}/pages/{idx}/save {saved_by:"Save Page"}`.
+Save serializes the page and Labeler sidecars into the current project event/blob store. A supplied page
+generation must match; successful content persistence advances saved-generation tracking. Missing IDs or
+changelog-only writes do not incorrectly clear dirty state. Store-write failure is explicit rather than a
+successful response with a hidden warning. The generated schema is the current response contract.
 
-Backend:
-
-1. `_resolve_save_directory` → `<data>/labeled-projects/<project_id>/`.
-2. Copy the source image to `<save_dir>/<project_id>_<page:03d>.png`
-   (only if not already there).
-3. Build `UserPageEnvelope` with `provenance.source_lane="labeled"`,
-   `saved_by="Save Page"`.
-4. Write `<save_dir>/<project_id>_<page:03d>.json`.
-5. Set `PageRecord.page_source = "filesystem"`.
-
-Returns `SavePageResponse {page: PagePayload, saved_path: Path}`.
-
-SPA:
-
-- Optimistically flip the source badge to "LABELED" while the
-  request is in flight.
-- On error, revert + toast.
-- Update the SaveStatus indicator timestamp.
-
-Concurrency note: if another tab simultaneously saves the same page,
-last-writer-wins by mtime. The image fingerprint (`source.image_fingerprint`)
-is checked on the *next* save — if the source image changed under us,
-return `409 image_drift`.
-
----
+Fetch-time image drift warnings are implemented. Save-time `409 image_drift` refusal/recovery is not;
+section 14 preserves that remaining requirement. Save does not write the retired labeled-envelope lane.
 
 ## 5. Save Project
 
-Long-running. `POST /api/projects/{id}/save-all`. Returns `202`+`Job`.
-
-Backend handler iterates `project_state.page_states.items()` (only the
-pages the user has actually accessed) and saves each via the same
-`Save Page` flow. Returns `SaveProjectResponse` once complete.
-
-```python
-class SaveProjectResponse(BaseModel):
-    saved_count: int
-    skipped_count: int
-    failed_count: int
-    total_count: int
-    failures: list[SaveFailure] = []
-```
-
-A `failure` is logged but doesn't stop the loop — failed pages are
-listed in the result.
-
-SPA: shows the busy overlay with progress (`"Saved 3 of 12"`). On
-completion: toast.success with the summary; on any failures, toast.warning
-with a "View details" action that opens a modal listing them.
-
----
+The save_project job visits loaded dirty pages, where generation exceeds last_saved_generation, rather than
+unconditionally rewriting every accessed page. It records completed progress and supports cancellation.
+Save Project is non-destructive and does not require confirmation. Current result fields are the public
+job result emitted by `core/jobs/handlers/save_project.py`.
 
 ## 6. Reload (formerly "Load Page") + Undo/Redo
 
@@ -247,25 +208,13 @@ notifications stream.
 
 ## 11. Auto-save semantics
 
-The backend's `core/page_state.py` mirrors the legacy: every mutation
-that changes the page (structural edit, bbox edit, validation toggle,
-GT edit) triggers `_auto_save_to_cache`. This:
+Successful page mutations persist content and sidecars through the event store under the per-page lock.
+Selection is session-only state and is not a content save. Cache envelopes are retired. Reload refreshes
+the current saved head rather than discarding to a prior labeled file.
 
-- Writes a `UserPageEnvelope` to `<cache>/page-images/<project>_<page:03d>_envelope.json`
-  with `source_lane="cached"`, `saved_by="Auto-save"`,
-  `update_page_source=False`.
-- Best-effort: errors are logged + warning notification, NOT raised
-  to the user-action's response (the user's mutation succeeded).
-
-The visible `page_source` badge does **not** flip on auto-save. That
-flip only happens on explicit `Save Page`. Crash recovery uses the
-cache-lane envelope; explicit save creates the labeled-projects-lane
-envelope.
-
-This is **important** for both data safety and UX continuity. The
-legacy depends on this distinction.
-
----
+Evidence: `core/page_state.py::save_page_content_to_store`, `api/pages.py`, `api/words.py`,
+`tests/integration/test_save_page_route_roundtrip.py`, `test_save_project_roundtrip.py` and `test_save_dirty_bit.py`.
+Verified by source/test inspection on 2026-11-13.
 
 ## 12. Hotkeys
 
@@ -296,7 +245,7 @@ uses `Cmd` automatically via `react-hotkeys-hook`'s `Mod+` syntax.
   with progress events; failures report properly.
 - Backend: `tests/integration/test_rematch_gt.py` — per-word overrides
   cleared; page-wide alignment re-run; auto-saved to cache.
-- Backend: `tests/integration/test_image_drift.py` — modify the source
+- Backend: `tests/integration/test_image_drift_route.py` — modify the source
   image on disk between page load and save; expect `409 image_drift`.
 - E2E: `test_page_actions.py` — port from legacy:
   - Save Page → badge flips LABELED

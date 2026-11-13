@@ -3,7 +3,7 @@ kind: context
 status: active
 owner: maintainers
 created: 2026-05-06
-last_verified: 2026-11-11
+last_verified: 2026-11-13
 ---
 
 # Open Questions for `pdomain-ocr-labeler-spa`

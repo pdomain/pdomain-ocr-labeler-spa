@@ -3,7 +3,7 @@ kind: process
 status: active
 owner: maintainers
 created: 2026-07-13
-last_verified: 2026-07-13
+last_verified: 2026-11-13
 ---
 
 # DOCGRAPH.md — shared docgraph rules
@@ -14,7 +14,7 @@ last_verified: 2026-07-13
 - **Kind:** process
 - **Status:** active
 - **Owner:** maintainers
-- **Last verified:** 2026-07-13
+- **Last verified:** 2026-11-13
 - **Read when:** starting docgraph work, retrieving repo docs, checking doc
   lifecycle state, or updating docgraph-managed context.
 - **Search terms:** docgraph rules, retrieval ladder, lifecycle semantics,

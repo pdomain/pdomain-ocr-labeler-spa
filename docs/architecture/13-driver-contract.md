@@ -3,7 +3,7 @@ kind: architecture
 status: built
 owner: maintainers
 created: 2026-05-06
-last_verified: 2026-09-18
+last_verified: 2026-11-13
 ---
 
 # 13 — Driver-Compatibility Contract
@@ -451,7 +451,7 @@ word's position in the page line-match list).
 |---|---|
 | `word-glyph-badge-{line}-{word}` | Corner badge on `<WordCell>`; absent when no annotations/predictions |
 | `word-glyph-chip-row-{line}-{word}` | Chip row under GT input |
-| `word-glyph-chip-{line}-{word}-{kind}` | Individual chip. `kind` is the lowercased ligature value, such as `ct`, `fi` or `long_st`, or `long_s`, `swash` or `predicted-{kind}` |
+| `word-glyph-chip-{line}-{word}-{kind}` | Individual chip. `kind` is the lowercased ligature value, such as `ct`, `fi` or `long_s_t`, or `long_s`, `swash` or `predicted-{kind}` |
 | `glyph-panel-{line}-{word}` | The `<GlyphAnnotationPanel>` popover/section |
 | `glyph-panel-add-ligature` | "Add ligature" button inside panel |
 | `glyph-panel-ligature-kind-select` | Ligature kind enum picker |
@@ -772,3 +772,11 @@ Source-group comparison uses the composed F2-to-P3-to-OCR mapping. It retains
 changed, ambiguous, unmapped, and exhausted outcomes. Mapped coarse formatting
 can remain reviewable after unambiguous wording changes; inline style transfer
 requires exact supported grapheme mappings.
+
+## Mounted replacement and verification scope
+
+Section 2.11's retired word-edit modal is replaced by the worklist pencil/right-panel `word-detail` path.
+`tests/e2e/test_project_page_smoke.py::test_word_edit_dialog_lifecycle` retains its historical test name
+while exercising the mounted replacement and checking that the modal is absent. Glyph test-ID suffixes
+follow lowercased stored/wire kind values, including the legacy `long_s_t` alias. Static driver checks
+are not an exhaustive fresh browser run of every feature suite.

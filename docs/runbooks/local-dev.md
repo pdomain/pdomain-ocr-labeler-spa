@@ -3,7 +3,7 @@ kind: runbook
 status: active
 owner: maintainers
 created: 2026-05-31
-last_verified: 2026-07-13
+last_verified: 2026-11-13
 ---
 
 # Local Development Runbook
@@ -116,8 +116,8 @@ just openapi-export
 # exports /openapi.json → regenerates frontend/src/api/types.ts
 ```
 
-CI gates on `git diff --exit-code frontend/src/api/types.ts` after re-running
-this, so any drift fails the build.
+CI regenerates the types and runs the TypeScript checks. Inspect the generated diff before committing;
+there is no separate git-diff refusal step or pre-push OpenAPI hook in the current configuration.
 
 ---
 
@@ -179,7 +179,7 @@ All variables use the `PDLABELER_` prefix (`settings.py`).
 |---------|-----|
 | "SPA not built" error on `just run` | `just frontend-build` |
 | `ModuleNotFoundError` after merging a worktree | `uv sync --locked --group dev && just local-setup-py` |
-| pnpm link not applying after `just local-dev` | `rm -rf frontend/node_modules frontend/pnpm-lock.yaml && pnpm install` inside `frontend/` |
+| pnpm link not applying after `just local-dev` | `just local-frontend-install` to restore the link overlay while preserving the lock |
 | Port conflict on startup | Set `PDLABELER_PORT=NNNN` or let the port-probing pick the next free port |
 | TypeScript errors after `just openapi-export` | Regenerated `types.ts` may expose new type gaps — fix them before committing |
 

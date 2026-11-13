@@ -3,7 +3,7 @@ kind: spec
 status: active
 owner: maintainers
 created: 2026-06-01
-last_verified: 2026-11-06
+last_verified: 2026-11-13
 ---
 
 # Behavior unit spec - Root screen
@@ -144,6 +144,12 @@ filtering data.
 ## Known regressions
 
 - None captured yet.
+
+## Implementation reconciliation (2026-11-13)
+
+All/Active/Complete filters are implemented again with real progress (commit `e93ac2d0`); Archive remains
+absent. Project opening can initialize page storage/OCR, so it is not a promise of zero page-content-store
+activity. RootPage.test.tsx covers filters, progress, permanent confirmed deletion and source-folder opening.
 
 ## Adversarial Review
 

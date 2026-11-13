@@ -3,7 +3,7 @@ kind: architecture
 status: built
 owner: maintainers
 created: 2026-05-06
-last_verified: 2026-09-18
+last_verified: 2026-11-13
 ---
 
 # 18 — Text Normalization (Long-S, Ligatures, Glyph Variants)
@@ -42,8 +42,8 @@ modifies the OCR result, the GT text, or the plaintext tabs.
 
 **GT input is still validated**, independent of this removed capability: the
 GT-update endpoint (`api/words.py`) rejects long-s (U+017F) and the U+FB00–
-U+FB06 ligature block with `400 validation_error`, so ground truth stays
-ASCII. That check is a codepoint denylist, not a normalizer — it does not
+U+FB06 ligature block with `400 validation_error`. Other Unicode remains allowed. That check is a codepoint
+denylist, not a normalizer — it does not
 transform text, it refuses specific input. See
 `tests/integration/test_text_norm_config.py` (acceptance A1).
 

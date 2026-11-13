@@ -3,7 +3,7 @@ kind: spec
 status: active
 owner: maintainers
 created: 2026-06-01
-last_verified: 2026-07-13
+last_verified: 2026-11-13
 ---
 
 # Behavior unit spec - Right panel detail views
@@ -70,6 +70,17 @@ predecessor undo are not yet implemented.
 - **Test:** -
 
 ### B-RIGHT-003 - Word geometry sections apply explicit bbox/erase/char changes
+
+**Implementation reconciliation (2026-11-13).** The current source/test scope is recorded below.
+The original acceptance fields remain after it; any stronger unimplemented expectation is retained, not waived.
+
+- **Observed trigger:** Blur a changed BBox coordinate input or use a nudge/refine action.
+- **Current behavior:** Typed coordinate changes commit on blur; nudges commit immediately. Refine,
+  Expand+Refine and Expand enqueue the scoped refine modes. Crop is replaced by Expand.
+- **Current limits:** Clearing a coordinate does not commit zero; focused draft text survives refetch.
+- **Additional evidence:** `frontend/src/components/right-panel/sections/BBoxSection.test.tsx`; commit `6b18c9a4`.
+
+**Original acceptance fields:**
 
 - **Flow(s):** -
 - **Composed by:** B-RIGHT-001
@@ -279,6 +290,13 @@ predecessor undo are not yet implemented.
 ## Known regressions
 
 - None captured yet.
+
+## Implementation reconciliation (2026-11-13)
+
+The mounted word editor, line GT blur commit, selected-word validate/unvalidate and block-scope saving
+are implemented. Snap-to-ink remains manual/unwired. Char-bbox durability is proven across a fresh store
+by `tests/integration/test_char_sidecar_store_roundtrip.py`; downstream consumer semantics remain separate.
+Typography suggestions and predecessor-based undo are still open.
 
 ## Adversarial Review
 

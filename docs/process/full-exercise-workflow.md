@@ -3,7 +3,7 @@ kind: process
 status: partial
 owner: maintainers
 created: 2026-05-19
-last_verified: 2026-07-13
+last_verified: 2026-11-13
 ---
 
 # Full Exercise Workflow — pdomain-ocr-labeler-spa
@@ -22,6 +22,15 @@ last_verified: 2026-07-13
 > `data-testid="<value>"`.
 
 ---
+
+## Current implementation qualifications (2026-11-13)
+
+This remains a partial manual exercise, not an exhaustive current-authority or fresh passing transcript.
+Persistence scenarios use event-store content blobs and current-head reload, not labeled/cached JSON
+envelopes. Mutations persist immediately; Reload does not discard them to a previous explicit Save.
+General export requires complete text and typography review. TypographySection replaces the old style
+controls. The original scenario wording remains acceptance/history where these qualifications differ;
+unimplemented expectations must not be reported as passing. See the current architecture and roadmap.
 
 ## Prerequisites / Setup
 
@@ -1719,82 +1728,56 @@ grid does not break the layout in a catastrophic way.
 
 ### 10.1 — Save Page
 
-**Action.** On a page that has been edited (some words validated, some GT changed),
-click `save-page-button`.
+**Action.** Edit GT/validation, then use Save Page.
 
-**Expected.**
+**Expected.** The save route persists page content and sidecars to the project event/blob store. A supplied
+generation must match. A failed store write is visible and does not falsely clear dirty state.
 
-- `POST .../pages/{idx}/save` fires.
-- `page-source-badge` changes from "CACHED OCR" / "RAW OCR" to "LABELED" (green).
-- Toast: positive ("Page saved" or similar).
-- `SaveStatus` indicator below the page name shows "Saved N seconds ago".
-- On disk: `<labeled-projects>/<project_id>/<project_id>_<page:03d>.json`
-  and `<project_id>_<page:03d>.png` are created.
-
-**Pass criterion.** Badge is green LABELED. Files exist on disk. JSON envelope
-has `schema.version` of 2.1 or 2.2.
+**Pass criterion.** A fresh store read reproduces the saved GT and validation. Do not require labeled JSON/PNG
+envelopes, a v2.1/v2.2 schema badge or a nonexistent SaveStatus component as proof.
 
 ---
 
 ### 10.2 — Verify saved content after page reload
 
-**Action.**
+**Action.** Save changed GT/validation, reload the page, then read it again through a fresh store.
 
-1. Save a page with some validated words (10.1).
-2. Click `load-page-button` (AlertDialog → confirm).
+**Expected.** Reload hydrates the current aggregate head. GT and review state remain durable.
 
-**Expected.** Page reloads from the saved file. Previously validated words are
-still validated. Previously edited GT inputs still show the edited values.
-`page-source-badge` shows "LABELED" (not "CACHED OCR").
-
-**Pass criterion.** Page state matches what was saved. No data loss.
+**Pass criterion.** No edited content is lost; this does not establish an old labeled-file lane.
 
 ---
 
 ### 10.3 — Auto-save to cache after each mutation
 
-**Action.**
+**Action.** Edit a word without an explicit Save, restart the backend and reopen that page.
 
-1. Make a word edit (change GT text).
-2. Do NOT click Save Page.
-3. Restart the FastAPI server.
-4. Navigate back to the same page.
+**Expected.** The mutation's current content and sidecars are already in the event/blob store.
 
-**Expected.** The page reloads from the **cached lane** envelope
-(`<cache>/page-images/<project>_<page:03d>_envelope.json`). The GT edit is
-preserved. `page-source-badge` shows "CACHED OCR".
-
-**Pass criterion.** Edited GT text is visible after server restart. Badge shows
-CACHED OCR.
+**Pass criterion.** A fresh store reload retains the edit. The retired cached-envelope filename and CACHED OCR
+badge are not the persistence proof.
 
 ---
 
 ### 10.4 — Auto-save notification
 
-**Action.** Make a word edit. Observe the notifications area.
+**Action.** Make a word edit and inspect success/error behavior.
 
-**Expected.** An auto-save positive notification may appear (implementation may
-filter these to reduce noise). The `SaveStatus` indicator shows "Saved N seconds
-ago".
+**Expected.** Positive server auto-save notifications with the filtered prefix need not render a toast.
+Failures remain visible; direct client notifications are a separate channel.
 
-**Pass criterion.** `SaveStatus` text updates within ~2s of the mutation.
+**Pass criterion.** No false success masks a persistence failure; absence of a positive auto-save toast is valid.
 
 ---
 
 ### 10.5 — Save Project
 
-**Action.** Navigate through 3 pages, make at least one edit on each. Click
-`save-project-button`.
+**Action.** Edit pages, then run Save Project.
 
-**Expected.**
+**Expected.** The job processes loaded dirty pages, reports progress and supports cancellation. Missing-ID
+or changelog-only writes do not clear content dirty state.
 
-- `POST /api/projects/{id}/save-all` fires.
-- `busy-overlay` is visible with progress text ("Saved 1 of 3", etc.).
-- On completion: overlay hides. Positive toast with summary ("Saved 3 pages").
-- `project.json` on disk has `saved_pages` updated.
-
-**Pass criterion.** All 3 pages have `.json` and `.png` files in
-`<labeled-projects>/<id>/`. Toast shows correct count.
+**Pass criterion.** Completed content writes survive a fresh store reload and unfinished/failed work remains explicit.
 
 ---
 
@@ -1915,21 +1898,13 @@ not the hand-edited values.
 
 ### 10.12 — Load Page from disk (discard edits)
 
-**Action.**
+**Action.** Edit GT, then use Reload.
 
-1. Make several edits to the current page.
-2. Click `load-page-button` (or press `Ctrl+L`).
-3. Confirm the AlertDialog.
+**Expected.** Reload refreshes the saved current event-store head. It does not undo a persisted mutation by
+returning to an older explicit-Save envelope. Use page history for undo/redo.
 
-**Expected.**
-
-- `POST .../pages/{idx}/load` fires.
-- Page reloads from the labeled lane (or cached lane if no labeled file exists).
-- All in-session edits are discarded.
-- Toast: "Page reloaded from disk. Unsaved edits discarded."
-
-**Pass criterion.** Edits are gone. Page shows the state from the last explicit
-save.
+**Pass criterion.** Current edits survive refresh; explicit history operations, rather than a misleading discard
+promise, control restoration.
 
 ---
 

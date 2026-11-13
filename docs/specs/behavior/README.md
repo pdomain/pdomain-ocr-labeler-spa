@@ -3,7 +3,7 @@ kind: spec
 status: active
 owner: maintainers
 created: 2026-06-01
-last_verified: 2026-11-12
+last_verified: 2026-11-13
 ---
 
 # Behavior Specs

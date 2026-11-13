@@ -3,7 +3,7 @@ kind: process
 status: active
 owner: maintainers
 created: 2026-05-06
-last_verified: 2026-07-13
+last_verified: 2026-11-13
 ---
 
 # pdomain-ocr-labeler-spa
@@ -57,15 +57,14 @@ A React SPA with a typed FastAPI backend gives:
 
 ## What changes for end users
 
-Almost nothing. The same `pdomain-ocr-labeler-ui` console script keeps
-working; the page tree under `/`, `/project/{id}`, and
-`/project/{id}/page/{n}` remains stable; every `data-testid` carries
-over (see [`docs/architecture/13-driver-contract.md`](docs/architecture/13-driver-contract.md)).
-Saved-project files (`<project>_NNN.json`) are read and written in the
-same `pd_ocr_labeler.user_page` v2.1 envelope (see
-[`docs/architecture/01-data-models.md`](docs/architecture/01-data-models.md)).
+The `pdomain-ocr-labeler-ui` console script remains the entry point. Legacy singular project URLs
+redirect to the canonical plural routes. Mounted controls follow the current
+[driver contract](docs/architecture/13-driver-contract.md), including explicitly retired surfaces.
+Page edits persist through the project event store and content-addressed blobs.
+Source-project inputs remain separate from these saved edits. See [persistence](docs/architecture/09-persistence.md) and
+[page loading and history](docs/architecture/29-page-loading-and-history.md).
 
-## Repository layout (planned)
+## Repository layout
 
 ```
 pdomain-ocr-labeler-spa/
@@ -145,7 +144,7 @@ Specs are split into two trees as of 2026-05-14:
 | [`20-glyph-annotations.md`](docs/architecture/20-glyph-annotations.md) | Glyph-level annotations — manual review and dataset-export path implemented; no predictor exists or will be built (`docs/context/decisions.md`, 2026-09-18) |
 | [Page loading and history](docs/architecture/29-page-loading-and-history.md) | Cold-page jobs and visible version navigation |
 | [`21-konva-renderer.md`](docs/architecture/21-konva-renderer.md) | Konva renderer for `PageImageCanvas` + `BBoxOverlay` |
-| [`22-page-surface-wireup.md`](docs/architecture/22-page-surface-wireup.md) | `ProjectPage` real labeling surface assembly |
+| [`24-shell-layout.md`](docs/architecture/24-shell-layout.md) | `ProjectPage` real labeling surface assembly |
 | [`23-page-payload-backend.md`](docs/architecture/23-page-payload-backend.md) | Real backend page payload + 19 mutation endpoints |
 | [`24-shell-layout.md`](docs/architecture/24-shell-layout.md) | Studio shell — Rail, Drawer, Breadcrumb, QuickSearch |
 | [`25-drawer-worklist.md`](docs/architecture/25-drawer-worklist.md) | Drawer — Worklist, Hierarchy, BulkActions |
@@ -175,11 +174,8 @@ instead.
 
 ## Where to start
 
-1. Read [`OPEN_QUESTIONS.md`](OPEN_QUESTIONS.md) — these are decisions
-   the spec authors deferred to the human. Resolve before starting M1.
+1. Read [`OPEN_QUESTIONS.md`](OPEN_QUESTIONS.md) for owner decisions that still constrain new work.
 2. Read [`docs/architecture/00-overview.md`](docs/architecture/00-overview.md) for the
    overall shape.
-3. For implementation: pick the next milestone in
-   [`specs/16-milestones.md`](specs/16-milestones.md). Each milestone
-   names: files to create/touch, acceptance tests to satisfy, and the
-   specs that govern it.
+3. Choose current work from the [intent map](docs/context/intent-map.md).
+   [`specs/16-milestones.md`](specs/16-milestones.md) preserves acceptance history.

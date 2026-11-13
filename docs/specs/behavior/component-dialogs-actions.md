@@ -3,7 +3,7 @@ kind: spec
 status: active
 owner: maintainers
 created: 2026-06-01
-last_verified: 2026-11-12
+last_verified: 2026-11-13
 ---
 
 # Behavior unit spec - Page actions and dialogs
@@ -344,6 +344,18 @@ last_verified: 2026-11-12
 
 ### B-ACTIONS-020 - Manual rotation action creates job and updates rotation badge
 
+**Implementation reconciliation (2026-11-13).** The current source/test scope is recorded below.
+The original acceptance fields remain after it; any stronger unimplemented expectation is retained, not waived.
+
+- **Observed trigger:** Run manual rotate or auto-rotate-all from the mounted page actions.
+- **Current behavior:** Jobs rotate source pixels, rerun OCR and persist aggregate rotation metadata.
+  Auto rotation protects manual pages unless overwrite_manual is requested. Immutable book sources reject
+  rotation. These are implemented effects, not plumbing stubs.
+- **Additional evidence:** `tests/integration/test_rotate_job.py`, `test_auto_rotate_all_job.py`,
+  `tests/e2e/test_rotate_parity.py`.
+
+**Original acceptance fields:**
+
 - **Flow(s):** F-ROTATE-PAGE-01
 - **Composed by:** B-ACTIONS-010
 - **Trigger:** User rotates clockwise, counter-clockwise, or 180 degrees.
@@ -376,6 +388,12 @@ last_verified: 2026-11-12
 
 - B-ACTIONS-001 - OCR config trigger disappeared after HeaderBar controls were
   deprecated; #405 restored a real visible project-route trigger.
+
+## Implementation reconciliation (2026-11-13)
+
+PageActionsCompact is mounted and rotation is implemented. B-ACTIONS-021 remains an unimplemented
+save-time `409 image_drift` refusal/recovery requirement. GET drift detection and ImageDriftBanner are
+shipped; they do not satisfy that stronger requirement. See architecture 08 section 14.
 
 ## Adversarial Review
 

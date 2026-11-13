@@ -45,7 +45,7 @@ One file per domain area:
 | `healthz.py` | `GET /healthz` liveness probe |
 | `env_js.py` | `GET /env.js` runtime config injection |
 | `session_state.py` | last-opened project persistence |
-| `normalize.py` | text normalization endpoint |
+| `typography.py`, `history.py`, `maintenance.py` | typography review, page history and explicit conservative pruning |
 | `static_mounts.py` | `/image-cache` StaticFiles + SPA catch-all |
 | `middleware/` | `RequestIdMiddleware`, error handler |
 
@@ -62,7 +62,7 @@ One file per domain area:
 | `source_root_state.py` | `SourceRootCarrier` FastAPI dependency |
 | `ocr/` | `predictor.py` (DocTR call site), `weights_resolver.py` |
 | `jobs/` | `runner.py` (async `JobRunner`), `events.py` (SSE), `handlers/` (one file per job type: reload-OCR, refine, export, …) |
-| `persistence/` | JSON/YAML disk I/O, atomic-rename save, `UserPageEnvelope` v2.1 read/write |
+| `persistence/` | local event/blob page store plus configuration and atomic file helpers |
 | `glyph/` | `bulk_mark.py`, `predictions.py` (M11 glyph annotation logic) |
 
 ### `adapters/` — pluggable protocols
@@ -107,8 +107,8 @@ Major groups:
 
 | File | Role |
 |------|------|
-| `ApiClient.ts` | Typed HTTP client wrapping `fetch`; all backend calls go here |
-| `types.ts` | **Generated** from `just openapi-export` — 6,130 lines; never hand-edit |
+| `client.ts` | handwritten ApiClient; selected hooks also use direct fetch with cancellation/order guards |
+| `types.ts` | **Generated** from `just openapi-export`; never hand-edit |
 
 ### `stores/` — Zustand stores
 
@@ -192,3 +192,12 @@ Evidence:
 | `frontend/dist/` | `just frontend-build` | Copied to `src/pdomain_ocr_labeler_spa/static/` |
 | `src/pdomain_ocr_labeler_spa/static/` | `just frontend-build` | Bundled into wheel as package resources |
 | `dist/*.whl` | `uv build --wheel` | Includes bundled SPA; `build_hooks/spa_check.py` refuses if `static/` is empty |
+
+## Current module evidence
+
+`bootstrap.py` installs the blob route, source-alignment/automation/review/history routers and current
+page-store wiring. `api/static_mounts.py::install_blob_route` serves content-addressed blobs.
+`usePage.ts`, `useTypographyReview.ts`, `useHistoryVersions.ts` and the source-alignment hooks own their
+respective client contracts. `tests/unit/api/test_static_mounts.py::test_blob_route_serves_existing_blob`
+and the integration load/save/history suites cover these seams. Verified by source/test inspection on
+2026-11-13; manifest pin checks alone do not certify every old module-map example.

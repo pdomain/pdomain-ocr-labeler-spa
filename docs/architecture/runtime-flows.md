@@ -3,167 +3,53 @@ kind: architecture
 status: built
 owner: maintainers
 created: 2026-05-31
-last_verified: 2026-07-13
+last_verified: 2026-11-13
 ---
 
 # Runtime Flows
 
-> **Status**: Active
-> **Last updated**: 2026-05-31
+These are the current local data/control paths. [Module ownership](module-map.md) supplies navigation.
 
-Major data and control flows through the system. For module ownership see
-[`module-map.md`](module-map.md); for endpoint shapes see
-[`02-backend.md`](02-backend.md).
+## Startup and serving
 
----
+The console script builds FastAPI through `bootstrap.py::build_app`. The factory wires app services,
+active-project/page state, middleware, routers, blob/image-cache routes and the reserved-path SPA fallback.
+The bundled SPA reads `/env.js`; unknown client routes receive the shell without masking reserved API routes.
 
-## Flow 1: App startup
+## Project and page loading
 
-```
-pdomain-ocr-labeler-ui
-  └─ __main__.py:main()
-       ├─ parse CLI args
-       ├─ build Settings (from env + args)
-       └─ uvicorn.run("bootstrap:build_app", factory=True)
-            └─ bootstrap.build_app(settings)
-                 ├─ adapters: FilesystemStorage, NoneAuth, LocalDoctrOCR
-                 ├─ AppState(settings, storage, auth, ocr_engine)  ← frozen dataclass
-                 ├─ carriers: ActiveProjectCarrier, OCRConfigCarrier, SourceRootCarrier
-                 ├─ lifespan:
-                 │    ├─ write port to .pdlabeler-port
-                 │    └─ pdomain-ops register_self()
-                 ├─ middleware: RequestIdMiddleware, error handler
-                 ├─ routers: all api/ routers mounted under /api/
-                 └─ mounts: /image-cache (StaticFiles), / catch-all (SPA fallback)
-```
+The root screen selects an existing source-root project. The labeler does not implement the older shared
+managed-library picker/copy-import proposal. Project navigation reads current memory/store state; a genuine
+cold miss returns a load job identifier. The image pane follows SSE stage/error updates while the shell stays
+interactive. Warm stored pages create no load job. Predictor preparation and OCR share one stage.
+See [page loading/history](29-page-loading-and-history.md).
 
-uvicorn serves on `PDLABELER_HOST:PDLABELER_PORT` (default `127.0.0.1`, next free from 8080).
+## Editing and persistence
 
----
+The workbench uses the actual line/word-index GT route in `api/words.py`, then invalidates page queries.
+Page mutations serialize current content and sidecars into the project event/blob store under the per-page
+lock. An unsuccessful store write is an explicit failure. Selection remains session-only state. Explicit Save
+uses generation guards and dirty-page tracking; Reload reads the current saved head.
 
-## Flow 2: Frontend startup
+## Jobs and notifications
 
-```
-Browser → GET /
-  └─ FastAPI catch-all → static/index.html
-       └─ Vite bundle parses; React 19 mounts to #root
-            └─ App.tsx
-                 ├─ React Router (v7)
-                 ├─ TanStack Query QueryClient
-                 ├─ Zustand stores (dialog, rail, selection, worklist, ui-prefs, viewport)
-                 └─ AppShell (pdomain-ui) — theme, font-scale, suite-siblings context
-                      └─ Router matches / → RootPage
-                           └─ GET /api/session-state
-                                └─ last project found?
-                                     ├─ yes → POST /api/projects/load
-                                     │         └─ navigate to /projects/{id}/pages/pageno/1
-                                     └─ no  → show project browser
-```
+Action callers track queued/running/terminal lifecycle through the public Job payload plus `event`
+discriminator. Job kind is `type`, not the event name. Callers refresh affected queries after completion and
+post cancellation through `/api/jobs/{job_id}/cancel`. Server notifications and direct client toasts are
+separate channels; a client toast need not have an SSE counterpart.
 
----
+## Export
 
-## Flow 3: Page load and display
+Export resolves saved pages/styles store-first and writes DocTR training artifacts, image crops, recognition
+labels and the manifest. It is not an XHTML pipeline. Complete text and typography review gate correction
+bundles separately; an active edited page is not automatically a reviewed sample. Current layout, saved export
+history and CLI options are documented in [export](10-export.md). Training and source ingestion stay in their
+existing owning repositories.
 
-```
-URL: /projects/:projectId/pages/pageno/:pageNo
-  └─ ProjectPage mounts
-       ├─ useProject(projectId) → GET /api/projects/{id}
-       │    └─ project metadata cached in QueryClient
-       │
-       └─ usePage(projectId, idx0) → GET /api/projects/{id}/pages/{idx}
-            └─ PagePayload:
-                 ├─ page_record (metadata)
-                 ├─ encoded_dims
-                 └─ lines[]: LineMatch[]
-                      └─ each LineMatch: WordMatch[] (OCR text, GT text, bbox, confidence, match status)
+## Evidence
 
-Rendering:
-  ├─ Canvas: PageImageCanvas
-  │    ├─ page bitmap from image URL
-  │    └─ BBoxOverlay (Konva): word/line/block bboxes on selection layer
-  │
-  └─ Worklist: WordMatchView
-       ├─ virtualises LineMatch[] (@tanstack/react-virtual)
-       ├─ filtered by matchFilterStore
-       └─ click bbox → selectionStore → RightPanel (WordDetail / LineDetail / BlockDetail)
-```
-
----
-
-## Flow 4: Word mutation (edit → save)
-
-```
-User edits GT text in word row or WordDetail
-  └─ useWordMutations.mutate()
-       └─ POST /api/projects/{id}/pages/{idx}/words/{wIdx}/text  { text: "..." }
-            └─ backend: page_state.set_word_gt_text(...)
-                 └─ returns updated PagePayload
-                      └─ TanStack Query onSuccess:
-                           └─ queryClient.invalidateQueries(['page', projectId, idx0])
-                                └─ refetch → canvas + worklist re-render
-```
-
-GT changes are held in-memory on the server until explicit Save Page
-(`POST .../save`), which flushes to the `UserPageEnvelope` v2.1 JSON sidecar.
-
----
-
-## Flow 5: Async job (Reload OCR example)
-
-```
-User triggers "Reload OCR"
-  └─ POST /api/projects/{id}/pages/{idx}/reload-ocr
-       └─ backend:
-            ├─ Job(id, type=RELOAD_OCR, status=PENDING) created
-            ├─ coroutine started in JobRunner
-            └─ 202 Accepted  { job_id: "..." }
-
-Frontend:
-  └─ useJobProgress(job_id)
-       ├─ polls GET /api/jobs/{job_id}
-       └─ opens SSE EventSource: GET /api/jobs/{job_id}/events
-
-Job coroutine:
-  PENDING → RUNNING → (progress events) → COMPLETE
-
-useJobCompletionInvalidation:
-  └─ on COMPLETE → queryClient.invalidateQueries(['page', ...])
-       └─ page data refetches with new OCR results
-```
-
-Same shape applies to Refine Bboxes and Export (see Flows 6 and below).
-
----
-
-## Flow 6: Export
-
-```
-User opens ExportDialog, selects scope + style filters
-  └─ POST /api/projects/{id}/export
-       └─ backend creates EXPORT job (same JobRunner as Flow 5)
-            └─ job handler:
-                 ├─ generates XHTML export file on disk
-                 └─ writes ExportManifest
-
-Frontend polls job → COMPLETE
-  └─ GET /api/projects/{id}/exports → manifest list with file paths
-```
-
----
-
-## Flow 7: Frontend dev mode (Vite proxy)
-
-```
-Backend starts on port N
-  └─ writes N to .pdlabeler-port
-
-vite.config.ts reads .pdlabeler-port (fallback: 8080)
-  └─ Vite dev server on :5173
-       ├─ serves SPA via HMR
-       └─ proxies /api/* and /image-cache/* → http://localhost:N
-
-Browser at :5173
-  └─ API calls → Vite proxy → FastAPI backend
-```
-
-Run with `just dev` (uvicorn --reload) in terminal 1 and `just frontend-dev` (Vite) in terminal 2.
+- Code: `bootstrap.py`, `api/pages.py`, `api/words.py`, `core/page_state.py`, `core/persistence/page_store.py`,
+  `core/jobs/handlers/export.py`; frontend `ProjectPage.tsx`, `usePage.ts`, `useJobProgress.ts`.
+- Tests: `tests/integration/test_load_page_job.py`, `test_save_page_route_roundtrip.py`,
+  `test_export_list_and_cli_store.py`, and `tests/unit/api/test_typography_corrections.py`.
+- Verified: 2026-11-13 by source and test inspection. This does not claim a fresh complete browser exercise.

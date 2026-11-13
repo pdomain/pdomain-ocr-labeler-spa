@@ -3,7 +3,7 @@ kind: spec
 status: active
 owner: maintainers
 created: 2026-05-06
-last_verified: 2026-11-12
+last_verified: 2026-11-13
 ---
 
 # `pdomain-ocr-labeler-spa` Specs
@@ -59,7 +59,7 @@ Glyph annotations now live in [architecture](../docs/architecture/20-glyph-annot
 | 18 | [`../docs/architecture/18-text-normalization.md`](../docs/architecture/18-text-normalization.md) | Long-S / ligature normalization (D-025) |
 | 19 | [`../docs/architecture/19-auto-rotation.md`](../docs/architecture/19-auto-rotation.md) | Manual + auto page rotation (D-029) |
 | 21 | [`../docs/architecture/21-konva-renderer.md`](../docs/architecture/21-konva-renderer.md) | Konva renderer for `PageImageCanvas` + `BBoxOverlay` (supersedes D-020 via D-043) |
-| 22 | [`../docs/architecture/22-page-surface-wireup.md`](../docs/architecture/22-page-surface-wireup.md) | Mount the real labeling surface in `ProjectPage` |
+| 22 | [`../docs/architecture/24-shell-layout.md`](../docs/architecture/24-shell-layout.md) | Mount the real labeling surface in `ProjectPage` |
 | 23 | [`../docs/architecture/23-page-payload-backend.md`](../docs/architecture/23-page-payload-backend.md) | Real handlers for `GET /pages/{idx}` + 19 mutation endpoints |
 | 24 | [`../docs/architecture/24-shell-layout.md`](../docs/architecture/24-shell-layout.md) | Studio shell — 5-zone grid, Rail, Drawer, Breadcrumb, QuickSearch |
 | 25 | [`../docs/architecture/25-drawer-worklist.md`](../docs/architecture/25-drawer-worklist.md) | Drawer — Worklist, Hierarchy, BulkActions |

@@ -3,7 +3,7 @@ kind: architecture
 status: built
 owner: maintainers
 created: 2026-05-06
-last_verified: 2026-07-13
+last_verified: 2026-11-13
 ---
 
 # 12 — Hotkeys + Accessibility
@@ -123,22 +123,10 @@ Drag modifiers (mouse + key combos):
 
 ## 7. Word edit dialog scope
 
-| Key | Action |
-|---|---|
-| `Enter` (in GT input) | Commit GT |
-| `Esc` | Close dialog (discard pending) |
-| `Shift+Enter` | Apply & Close (commit pending) |
-| `Tab` / `Shift+Tab` | Standard form navigation (auto via Radix focus trap) |
-| `ArrowLeft` / `ArrowRight` | Switch to prev/next word in line |
-| `Shift+ArrowLeft` / `Shift+ArrowRight` | Nudge left edge in/out |
-| `Shift+ArrowUp` / `Shift+ArrowDown` | Nudge top edge in/out |
-| `Ctrl+ArrowLeft` / `Ctrl+ArrowRight` | Nudge right edge in/out |
-| `Ctrl+ArrowUp` / `Ctrl+ArrowDown` | Nudge bottom edge in/out |
-| `R` | Refine |
-| `Shift+R` | Expand + Refine |
-| `M` | Apply current Style+Scope |
-| `Shift+M` | Apply current Component |
-| `Delete` | Delete word (with confirm) |
+The word-edit modal and its dialog-scope keymap are retired. WordDetail is mounted in the right panel.
+WordCell commits GT by blurring on Enter and restores text without blur on Escape. Native Tab traversal
+remains. Region review has its own active scope: 5, n/p, Enter, x, Delete, and physical bracket positions
+for page-queue navigation. `hotkeyMap.ts` and `useViewportHotkeys.test.ts` record the current ownership.
 
 ## 8. Source folder dialog scope
 

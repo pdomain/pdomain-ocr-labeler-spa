@@ -3,329 +3,33 @@ kind: architecture
 status: built
 owner: maintainers
 created: 2026-05-16
-last_verified: 2026-11-12
+last_verified: 2026-11-13
 ---
 
 # 26 — Right Panel Detail Views
 
-> **Status**: Active (shipped — hi-fi redesign Slices 16–22, P2, P5.e–P5.g)
-> **Last updated**: 2026-05-16
-> **Components documented**: `WordDetail`, `WordHeader`, `WordFooter`,
-> `WordImagePreview`, `LineDetail`, `LineWordsCard`, `BlockDetail`,
-> `OcrGtCompareRow`, `dialog-store`, `useLineMutations`, `useWordMutations`,
-> `useRefineAvailable`
+The right panel is the mounted word/line/paragraph/block editor. The old standalone word-edit modal is
+retired. Word IDs and logical word_index determine lookup/pager behavior rather than array position.
 
-## 1. Overview
+## Routing and actions
 
-The right panel is a context-sensitive detail view that changes based on
-the current selection level (word / line / block or para). At the word level it
-presents a multi-section accordion editor — image preview, OCR/GT comparison,
-style and component tagging, and five specialist editing tools. At the line
-level it shows a two-tab view (Line tab with GT editing + Line tab with a
-scrollable word list). At the block/para level it shows layout-type selection
-and a tree of child items. Together these views allow a labeler to inspect,
-correct, and annotate every OCR artifact at the right granularity without
-switching to a separate dialog.
+Source-alignment detail has priority. Selected word, multi-line, line, paragraph and block views then
+follow the current RightPanel routing. ProjectPage supplies 640px width for line/block editing and 520px
+for other detail views. ParagraphDetail exposes the mounted paragraph actions.
 
-At word level, `TypographySection` replaces the former style palette and range
-editor. It uses server-provided extended grapheme boundaries and appends
-canonical corrections. Suggestion accept/edit and predecessor-based undo are
-not yet implemented; reject, quarantine, defer, reviewed, and reviewed-regular
-decisions are available.
+Line GT commits on blur through its mutation. LineDetail bulk Skip unvalidates selected words.
+WordFooter Skip advances to the next word without a server mutation. Block-scope Save patches every paragraph
+group; paragraph scope patches only that
+paragraph. The earlier missing-commit/bulk/block-save/width notes are resolved implementation history.
 
-The panel frame stays local. The evidence is in the 2026-11-11 entry of
-[the decision log](../context/decisions.md).
+## Typography and limits
 
-## 2. User-facing goals
+TypographySection owns server-head-aware grapheme/journal editing. Suggestion acceptance/editing and
+predecessor compensation remain open under OPEN_QUESTIONS.md and architecture 31. BlockDetail's model
+suggestion state remains null; no source or trigger is implemented, and no new predictor is approved here.
 
-- I need to see the OCR and GT text side-by-side for any word I click so I can
-  spot and fix transcription errors without scrolling.
-- I need to mark a word as validated (or skip to the next one) with a single
-  keystroke to work through a long queue efficiently.
-- I need to see all words on a line at once, toggle their validation state in
-  bulk, and merge adjacent lines when the OCR has split them incorrectly.
-- I need to classify each block as a heading, footnote, body text, etc. so the
-  downstream export is structured correctly.
-- I need to delete a word with a confirmation step so I don't accidentally
-  destroy data.
-
-## 3. Component tree / layout
-
-### Routing priority (evaluated top-to-bottom in RightPanel)
-
-| Condition | Component rendered | testid |
-|---|---|---|
-| `selectedWords.length > 1` | `MultiWordDetail` | `multi-word-detail` |
-| `level === "line" && selectedLines.length > 1` | `MultiLineDetail` | `multi-line-detail` |
-| `level === "line" && selectedLines.length === 1` | `LineDetail` | `line-detail` |
-| `level === "word"` | `WordDetail` | `word-detail` |
-| `level === "block" \| "para"` | `BlockDetail` | `block-detail` |
-| `level === "region"` | `RegionDetail` | `region-detail` |
-| `level === "none"` | text tabs slot, else placeholder | `right-panel-placeholder` |
-
-```
-RightPanel (rendered through ProjectPage's `rightSlot`)
-├── [selectedWords.length > 1]
-│   └── MultiWordDetail             data-testid="multi-word-detail"
-│
-├── [level === "line" && selectedLines.length > 1]
-│   └── MultiLineDetail             data-testid="multi-line-detail"
-│       ├── LineCard (per selected line)  data-testid="multi-line-card-{lineIndex}"
-│       │   └── WordRow (per word)        data-testid="gt-text-input-{l}-{w}"
-│       └── BulkBar (sticky footer)   data-testid="multi-line-bulk-bar"
-│
-├── [level === "line" && selectedLines.length === 1]
-│   └── LineDetail                  data-testid="line-detail"
-│       └── Tabs
-│           ├── LineCard (in "line" tab)
-│           ├── GTRow (in "line" tab)
-│           ├── StructureBox (in "line" tab)
-│           └── WordCardsView / WordRowsView (in "words" tab)
-│               └── LineWordsCard (per word)
-│
-├── [level === "word"]
-│   └── WordDetail                  data-testid="word-detail"
-│       ├── WordHeader              data-testid="word-header"
-│       ├── WordImagePreview        data-testid="word-image-preview"
-│       ├── OcrGtCompareRow         data-testid="ocr-gt-compare"
-│       │   └── UnicodePicker (inline, collapsible)
-│       ├── ComponentPalette        data-testid="component-palette"
-│       ├── Accordion               data-testid="word-detail-accordion"
-│       │   ├── BBoxSection
-│       │   ├── ReboxSection (Konva canvas)
-│       │   ├── ErasePixelsSection
-│       │   ├── StructureSection
-│       │   ├── TypographySection
-│       │   └── CharFixerSection (Konva canvas)
-│       └── WordFooter              data-testid="word-footer"  (sticky bottom)
-│
-└── [level === "block" | "para"]
-    └── BlockDetail                 data-testid="block-detail"
-        └── Tabs
-            ├── Layout tab (block level only)
-            ├── Items tab
-            └── Para Layout tab (block level only)
-```
-
-## 4. Data model
-
-### Primary types (from `frontend/src/api/types.ts`)
-
-```typescript
-// WordMatch — a single word's OCR+GT state
-interface WordMatch {
-  line_index: number;
-  word_index?: number;
-  ocr_text: string;
-  ground_truth_text: string;
-  match_status: "exact" | "fuzzy" | "mismatch" | "unmatched_gt" | "unmatched_ocr";
-  fuzz_score?: number;          // 0–100
-  is_validated?: boolean;
-  bbox: BBox;                   // { x, y, width, height } in image pixels
-  word_components?: string[];   // ["drop-cap", "footnote-ref", ...]
-  char_bboxes?: BBox[];         // per-char boxes (SPA sidecar, optional)
-}
-
-// LineMatch — a line on the page
-interface LineMatch {
-  line_index: number;
-  paragraph_index: number | null;
-  ocr_line_text?: string;
-  ground_truth_line_text?: string;
-  overall_match_status: MatchStatus;
-  word_matches: WordMatch[];
-  validated_word_count: number;
-  total_word_count: number;
-  is_fully_validated?: boolean;
-}
-
-// PagePayload — full page response
-interface PagePayload {
-  line_matches: LineMatch[];
-  // ... other fields
-}
-```
-
-### Mutations
-
-Page mutations invalidate the page query on success. Typography is separate:
-append success replaces only the word-head cache and invalidates only the page
-typography-review query; stale `409` invalidates only that word head.
-
-| Hook | Endpoint | Notes |
-|---|---|---|
-| `useUpdateWordGroundTruth` | `POST .../words/{li}/{wi}/gt` | Blur-commit |
-| `useTypographyHead` | `GET .../typography/words/{word_id}/head` | Current editable head |
-| `useTypographyReview` | `GET .../typography/review` | Page progress and heads |
-| `useAppendTypographyCorrection` | `POST .../typography/words/{word_id}/corrections` | Current-head append |
-| `useApplyComponent` | `POST .../words/{li}/{wi}/component` | Toggle |
-| `useReboxWord` | `POST .../words/{li}/{wi}/rebox` | BBoxSection + ReboxSection |
-| `useMergeWord` | `POST .../words/{li}/{wi}/merge` | `direction: "left"\|"right"` |
-| `useSplitWord` | `POST .../words/{li}/{wi}/split` | `x_fraction: float` |
-| `useErasePixels` | `POST .../words/{li}/{wi}/erase-pixels` | Sequential ops |
-| `useSetCharBboxes` | `POST .../words/{li}/{wi}/char-bboxes` | SPA sidecar |
-| `useToggleValidated` (WordFooter) | `POST .../words/{li}/{wi}/validated` | Toggle |
-| `useDeleteWord` (WordFooter) | `POST .../words/delete-batch` | One word index; confirm first |
-| `useValidateLine` | `POST .../words/validate-batch` | scope="line" |
-| `useMergeLines` | `POST .../lines/merge` | Two-element `line_indices` |
-| `usePatchParagraph` | `PATCH .../paragraphs/{pi}` | `layout_type` field |
-| `useRefineAvailable` | `GET /api/refine/available` | Probe, 5-min stale |
-
-### dialog-store
-
-Dialogs other than word editing use one imperative store. Word editing is the right panel.
-
-```typescript
-type SimpleDialogKey =
-  | "ocrConfig"
-  | "export"
-  | "hotkeyHelp"
-  | "sourceFolder"
-  | "pageKinds";
-```
-
-`dialogStore.openConfirm({ title, body, onConfirm })` opens the confirm dialog. The store has no word-edit opener.
-
-## 5. Interactions and behaviors
-
-### WordDetail
-
-Reads `selectionStore.level` and `selectionStore.path` to determine which word
-to display. Renders an empty-state `"No word selected."` div when `level !==
-"word"`.
-
-**Navigation (WordHeader)**
-
-- `◀` (`word-header-prev`) → `walkSibling("prev", page)` via `selection-store`.
-  Disabled when `wordIdx === 0`.
-- `▶` (`word-header-next`) → `walkSibling("next", page)`.
-  Disabled when `wordIdx === lineLength - 1`.
-- `StatusPip` renders the word's `match_status` mapped to `exact | fuzzy | mismatch`.
-  When `is_validated`, a `"✓"` label is shown on the pip.
-
-**Image preview (WordImagePreview)**
-
-- 76px-tall preview box with `bg-sunk` background.
-- When `imageUrl` is provided: shows `<img>` of the cropped word slice.
-- Fallback: renders `word.ocr_text` in 28px Georgia serif. When OCR is empty,
-  shows italic `∅`.
-- OCR confidence bar: uses `fuzz_score` (or 100 for exact matches) clamped 0–100.
-  Color: green ≥ 80%, amber ≥ 50%, red < 50%.
-- GT confidence bar: 100% when `is_validated`, 50% when OCR ≥ 80%, else 0%.
-
-**OCR/GT compare (OcrGtCompareRow)**
-
-- Left column: read-only OCR text well (monospace, `select-all`).
-- Right column: editable GT `<Input>`. Commits on blur (if changed) or on Enter.
-- "← OCR" button (`ocr-gt-copy-btn`): copies OCR text into the GT input and
-  immediately calls `onCommitGt`. Focuses the input after copy.
-- "Ω" button (`ocr-gt-omega-btn`): toggles inline `UnicodePicker`. When open,
-  `aria-pressed="true"` and accent background.
-- UnicodePicker: inserts selected glyphs at the current cursor position in the
-  GT input. See [`28-palettes-pickers.md` §UnicodePicker](28-palettes-pickers.md).
-- The `localGt` state syncs back from `gtText` only when the input is not
-  currently focused (prevents remote-update overwriting an in-progress edit).
-
-**ComponentPalette**
-
-- See [`28-palettes-pickers.md`](28-palettes-pickers.md).
-
-**Accordion (WordDetail)**
-
-- Uses `Accordion` in `type="multiple"` mode — any number of sections can be
-  open simultaneously.
-- Keeps a thin local wrapper around `@pdomain/pdomain-ui` Accordion primitives.
-  The wrapper maps the labeler `tag="accent"` contract to shared
-  `tone="accent"` and `tag="mismatch"` to `tone="danger"`.
-- Composes the labeler's hint text into the trigger body and its `KeyCap` into
-  the shared trigger's `endContent` slot. The shared primitive owns the header,
-  trigger, default chevron, and open/close behavior.
-- The accordion body has `paddingBottom: "52px"` so the sticky WordFooter does
-  not obscure the bottom item.
-- Six items in order: Bounding Box (keycap B), Rebox (keycap R, tag="accent"),
-  Erase Pixels (keycap E, tag="mismatch"), Structure (keycap S), Typography
-  (keycap T), Char Fixer (keycap F).
-- Accordion trigger hints: `BBoxSection` uses `bboxHint(word.bbox)` (formatted
-  coords); Rebox shows `"W × H px"`; CharFixer shows `"N ranges"` or
-  `"edit · fix · unicode"` when empty.
-
-Evidence:
-
-- Code: `frontend/src/components/ui/accordion.tsx` and
-  `frontend/src/components/right-panel/WordDetail.tsx`
-- Tests: `frontend/src/components/ui/Accordion.test.tsx` — tone mapping,
-  trigger hint, keycap slot, shared chevron, content, and testid pass-through
-- Commits: `77be4d4` (Accordion composition) and `120d3ef` (shared trigger
-  slots)
-- Verified: 2026-07-19 against current code and tests
-
-**WordFooter** (sticky `bottom-0`)
-
-- Validate button (`word-footer-validate`): calls `toggleValidated.mutate(...)`.
-  Accent style when already validated ("✓ Validated"), neutral when not.
-- Skip button (`word-footer-skip`): `walkSibling("next", page)` — no server call.
-- Delete button (`word-footer-delete`): opens a `ConfirmDialog` inline.
-  On confirm: `deleteWord.mutate({ lineIndex, wordIndex })` then closes dialog.
-
-### LineDetail
-
-**Line tab**
-
-- `StructureBox` shows: StatusPip + "Line N · Para N" mono label +
-  "N/N validated" count.
-- `GTRow` shows: editable input for `ground_truth_line_text`. Currently local
-  state only — the input captures edits but no blur-commit mutation is wired
-  (open question).
-- `LineCard` renders the existing words in the line (from `useWordMatches` or
-  passed `line` prop).
-- Validate-all footer button (`line-detail-validate-all`): calls
-  `validateLine.mutate({ lineIndex, validated: true })`. Disabled and shows
-  "All words validated ✓" when `line.is_fully_validated`.
-- Merge-prev (`line-detail-merge-prev`) / Merge-next (`line-detail-merge-next`)
-  buttons: call `mergeLines.mutate({ lineIndex, direction })`. Merge-prev is
-  disabled when `line_index === 0`. Error message shown when `mergeLines.isError`.
-
-**Words tab**
-
-- Density toggle (`line-detail-density-toggle`): switches between "Cards" view
-  (LineWordsCard per word) and "Rows" view (status pip + mono OCR text per word).
-  Preference persisted to `useUiPrefs.lineWordsDensity`.
-- Bulk bar (`line-detail-bulk-bar`): appears when any word checkboxes are
-  checked. Shows count + "Validate selected" + "Skip selected" + clear button.
-  Note: the bulk validate/skip actions in the current code clear the selection
-  but do not fire mutations — this is an open question.
-- `LineWordsCard`: per-word card with checkbox, 12px serif preview, OCR text,
-  and a GT diff line when OCR ≠ GT.
-
-### BlockDetail (level = "block" or "para")
-
-**Layout tab (block level only)**
-
-- 19 layout-type glyph cards in two groups: Structural (9) and Content (10).
-- Each card (`block-detail-layout-chip-{id}`) is a button with an inline SVG
-  glyph and label. Active card has `data-active="true"`, accent border,
-  `bg-accent/10`.
-- Model suggestion callout: shown when `suggestedLayout` is non-null (currently
-  always null — backend not wired). "Use suggestion" button
-  (`block-detail-layout-accept`) accepts and saves immediately.
-- Preview pane (`block-detail-preview`): shows sample text (first line's OCR
-  text, max 60 chars) styled to match the pending layout type.
-- Sticky footer: shows "Unsaved: {label}" when `pendingLayout !== selectedLayout`,
-  else shows current. "Save layout type" button (`block-detail-layout-save`)
-  disabled when no pending change or mutation pending. Saves via `patchParagraph`.
-
-**Items tab**
-
-- View sub-toggle: Flat (`block-detail-items-view-flat`) / Tree
-  (`block-detail-items-view-tree`). Default: Tree.
-- Flat: all relevant lines as `LineItemCard` rows. Tree: grouped by paragraph
-  with `ParaGroup` headers (`block-detail-para-{paraId}`).
-- Clicking a `LineItemCard` (`block-detail-line-card-{lineIndex}`) → `selectLine`.
-
-**Para Layout tab (block level only)**
-
-- Lists each paragraph as a button. Clicking → `selectPara(pId)`.
-- No layout editing within this tab — it navigates to the para's context.
+BBox/refine, rebox, erase, structure and character tools are described in the companion sections document.
+The local panel frame remains local; this migration does not authorize a shared workbench extraction.
 
 ## 6. data-testid contract
 
@@ -423,72 +127,6 @@ Rendered when two or more lines are selected simultaneously.
 | `gt-text-input-{l}-{w}` | input | GT edit input for word `(l, w)` |
 | `word-validate-button-{l}-{w}` | button | Per-word validate for word `(l, w)` |
 
-## 7. Keyboard shortcuts
-
-WordFooter renders `<KeyCap>` hints next to its buttons for discovery purposes
-but the key bindings themselves are owned by `useGlobalHotkeys` (wired at the
-ProjectPage level, outside this component set). Per-component hotkeys:
-
-- `Enter` inside `ocr-gt-input` → blurs the input (triggers commit).
-- `Enter` / `Space` on Hierarchy tree nodes → select action (in Hierarchy; not
-  in this group).
-
-No component in this group registers document-level hotkeys directly.
-
-## 8. Edge cases
-
-- **No word selected** (WordDetail): renders `"No word selected."` with the
-  `word-detail` testid.
-- **Word not found in page data** (WordDetail): renders `"Word not found in
-  page data."` with the `word-detail` testid.
-- **No line selected** (LineDetail): renders `"No line selected."`.
-- **Line not found in page data** (LineDetail): renders `"Line not found in
-  page data."`.
-- **No block/para selected** (BlockDetail): renders `"No block selected."` or
-  `"No paragraph selected."`.
-- **Word OCR text empty**: WordImagePreview shows italic `∅`; CharFixer shows no
-  cells; TypographySection fails closed without a server grapheme map;
-  StructureSection SplitPicker shows nothing.
-- **Line is fully validated**: `line-detail-validate-all` is disabled with text
-  "All words validated ✓".
-- **Merge-prev at first line**: `line-detail-merge-prev` is disabled
-  (`line.line_index === 0`).
-- **BlockDetail model suggestion**: `suggestedLayout` is currently always `null`
-  (backend not wired). The "No model suggestion available" muted callout is
-  shown instead.
-- **WordFooter delete in-flight**: the delete button is disabled while
-  `deleteWord.isPending`.
-- **Merge error**: `mergeLines.isError` shows `"Merge failed. Try again."` in
-  the Line tab footer.
-
-## 9. Open questions
-
-1. **LineDetail GT input commit**: `GTRow` maintains a local `gtText` state but
-   no blur-commit mutation is wired. When should the full-line GT text be
-   committed to the server? Via `PUT .../lines/{li}/gt` (which does not exist
-   yet), or by updating words individually?
-
-2. **LineDetail bulk validate/skip**: The "Validate selected" and "Skip selected"
-   buttons in the bulk action bar call `clearChecked()` but do not fire any
-   mutations. These need to be wired to `validate-batch` (for validate) and to
-   `walkSibling`-style iteration (for skip).
-
-3. **BlockDetail layout persistence at block scope**: `patchParagraph` patches a
-   single paragraph's `layout_type`. When the user is in `level="block"` mode
-   and no `paraId` is set (all lines selected), the save button is rendered but
-   the mutation is skipped (`if (paraId !== null) patchParagraph.mutate(...)`).
-   Should block-level layout type be saved to all paragraphs in the block, or
-   is there a separate block-level field?
-
-4. **BlockDetail model suggestion source**: `suggestedLayout` is `useState<LayoutType | null>(null)`
-   — always null. The spec does not yet define the endpoint or trigger for
-   model-based block layout suggestions.
-
-5. **Right panel width for line/block**: The `StudioShell.rightWidth` prop can
-   be set to 640 for line/block views. The `ProjectPage` must pass the correct
-   width based on the selection level. This wiring is not currently present
-   (the default 520 px is used for all levels).
-
 ## Multi-line editing
 
 Selecting more than one line opens MultiLineDetail. Cards appear in ascending line-index order. Each card shows
@@ -507,3 +145,9 @@ opens LineDetail; multi-word selection keeps its own detail view. The driver ide
   covers drag selection, GT reload, bulk validation, and single-line routing.
 - Verified: 2026-11-07 by source inspection. Mixed-selection and mutation-error browser coverage remain risks; this
   cleanup does not claim a fresh browser-suite pass.
+
+## Current evidence
+
+RightPanel.tsx, LineDetail.tsx, BlockDetail.tsx, ParagraphDetail.tsx and their component tests establish
+the routing/actions above. `tests/e2e/test_project_page_smoke.py` drives the mounted word editor.
+Verified by source/test inspection on 2026-11-13; the older dated evidence above retains its original scope.

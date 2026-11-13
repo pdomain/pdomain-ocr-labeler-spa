@@ -3,10 +3,14 @@ kind: reference
 status: active
 owner: maintainers
 created: 2026-06-01
-last_verified: 2026-07-13
+last_verified: 2026-11-13
 ---
 
 # Changelog
+
+This migration entry is historical and retains its original dependency observations. It is not a complete
+current API or pin catalogue; current architecture and manifests define those. No release assignment is
+inferred for the old Unreleased entry by this documentation pass.
 
 ## Unreleased
 

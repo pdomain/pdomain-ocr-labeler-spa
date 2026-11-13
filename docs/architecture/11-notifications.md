@@ -3,7 +3,7 @@ kind: architecture
 status: built
 owner: maintainers
 created: 2026-05-06
-last_verified: 2026-07-13
+last_verified: 2026-11-13
 ---
 
 # 11 — Notifications, Busy Overlays, and SSE Jobs
@@ -105,16 +105,10 @@ SSE wrapper.
 
 ### 2.4 Driver-agent path
 
-The driver agent (Playwright) doesn't open the SSE stream — it reads
-notifications from the DOM. Sonner renders each toast with
-`data-testid="notification-{kind}-{id}"` (custom toast renderer; see
-[`13-driver-contract.md`](13-driver-contract.md) §2.13).
-
-The driver-agent contract guarantees the `{kind, message, id}` triple
-is present. Spec author rule: every toast that lands in the DOM must
-also have been on the SSE stream (1:1 correspondence).
-
----
+Server notifications carry the driver notification identity and render through ToastMessage. Direct
+client toasts are a separate channel and need no corresponding SSE event. `useNotificationStream` filters
+positive messages beginning `auto-save:` followed by a space while retaining failures, then dispatches success/error/warn/info
+through the local toast adapter. `useNotificationStream.test.tsx` covers that filtering.
 
 ## 3. Busy overlay
 
@@ -163,11 +157,11 @@ testid: `project-loading-overlay`.
 
 ### 3.2 Cancel button
 
-For long jobs (`SAVE_PROJECT`, `EXPORT`), the busy overlay shows a
-Cancel button that calls `runner.cancel(jobId)`. Best-effort: handlers
-check the cancellation token periodically.
-
----
+BusyOverlay offers cancellation for save_project, export, auto_rotate_all, propose_page_kinds and
+propose_regions. Reload OCR is best-effort; refine/rotate omit cancellation. The canonical cancellation
+route is `POST /api/jobs/{job_id}/cancel`, as tested in BusyOverlay.test.tsx.
+Job SSE data is the public Job payload plus an `event` discriminator. Its `type` is the job kind,
+not the event name. `useJobProgress.ts` defines the lifecycle shape.
 
 ## 4. Inline banners
 
@@ -217,25 +211,9 @@ The busy overlay is up the whole time (driven by `useActiveJob`).
 
 ### 5.2 Auto-save after a word edit
 
-```
-SPA              Backend
- │ POST .../words/.../style {...}
- │─────────────────▶│
- │                  │ PageState.update_word_attributes(...)
- │                  │ _auto_save_to_cache(...)   ← writes envelope, emits notification
- │ 200 WordMatch    │
- │◀─────────────────│
- │ patch cache, render
- │
- │ (separately, on the SSE notifications stream:)
- │ event:notification {kind:"positive", message:"Auto-saved", ...}
- │ toast.success("Auto-saved")        ← optional; could be filtered out
-```
-
-For auto-save success, the SPA may filter the toast (it's noisy).
-Auto-save **failures** are surfaced as warning toasts.
-
----
+The mutation persists page content and Labeler sidecars to the event store and the action caller refreshes
+affected page queries. There is no cached-envelope autosave step. Fetch-time image drift renders a banner;
+that does not imply the still-unimplemented save-time image-drift refusal/recovery flow.
 
 ## 6. Notification de-duplication
 

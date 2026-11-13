@@ -3,7 +3,7 @@ kind: process
 status: active
 owner: maintainers
 created: 2026-07-13
-last_verified: 2026-07-13
+last_verified: 2026-11-13
 ---
 
 # CODEX.md — Codex-specific context
@@ -16,6 +16,6 @@ Read `DOCGRAPH.md` before docgraph work; its rules are authoritative for retriev
 - **Kind:** process
 - **Status:** active
 - **Owner:** maintainers
-- **Last verified:** 2026-07-13
+- **Last verified:** 2026-11-13
 - **Read when:** starting a Codex session in this repository.
 - **Search terms:** Codex, docgraph, repository guidance.

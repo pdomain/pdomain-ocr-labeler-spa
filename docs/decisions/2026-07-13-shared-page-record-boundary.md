@@ -2,7 +2,7 @@
 Status: active
 Owner: CT
 Created: 2026-07-13
-Last verified: 2026-07-14
+Last verified: 2026-11-13
 Kind: decision
 ---
 
@@ -47,6 +47,14 @@ compatibility export does not change persisted data or the API wire shape.
 
 This decision supersedes local ownership of the PageRecord lifecycle schema.
 No later decision supersedes this boundary.
+
+## Implementation update (2026-11-13)
+
+The temporary compatibility exports are removed, as already recorded in the 2026-07-14 decision-log entry.
+Current code imports shared lifecycle types directly from pdomain_ops.pages.
+`tests/unit/core/test_models_no_local_pagerecord.py` asserts that core.models exports neither PageRecord
+nor RotationSource. The original July implementation snapshot below is retained as history; the shared
+ownership decision itself remains active.
 
 ## Evidence
 

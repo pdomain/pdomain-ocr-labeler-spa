@@ -3,7 +3,7 @@ kind: architecture
 status: built
 owner: maintainers
 created: 2026-05-06
-last_verified: 2026-07-14
+last_verified: 2026-11-13
 ---
 
 # 01 — Data Models
@@ -306,11 +306,6 @@ class UpdateWordGroundTruthRequest(BaseModel):
     text: str
 
 
-class ApplyStyleRequest(BaseModel):
-    style: str  # one of ALLOWED_TEXT_STYLE_LABELS
-    scope: Literal["whole", "part"] = "whole"
-
-
 class ApplyComponentRequest(BaseModel):
     component: str  # one of ALLOWED_WORD_COMPONENT_LABELS
     enabled: bool
@@ -554,78 +549,16 @@ Status code conventions:
 
 ### `UserPageEnvelope` v2.1 / v2.2
 
-**Read + write byte-equivalent to legacy** (legacy
-`pd_ocr_labeler/models/user_page_persistence.py:83-86`).
+These envelope versions describe the legacy persistence format, not the current writer.
+`core/page_state.py::persist_page_to_file` rejects that retired write path. Current saves serialize page content
+and labeler sidecars into content-addressed blobs and advance the project's page aggregate.
+`core/persistence/page_store.py::LabelerPageStore` stores events in `.pd-pages/events.db`.
+See [persistence](09-persistence.md) and [loading/history](29-page-loading-and-history.md).
 
-Schema: `{"name": "pd_ocr_labeler.user_page", "version": "2.1"}` for
-files written without rotation state. **v2.2** is an additive bump
-(D-032, Q-A1) introducing `source.rotation_degrees: int = 0` and
-`source.rotation_source: Literal["none","auto","manual"] = "none"` to
-persist auto-rotation results across save/load. Readers MUST accept
-both versions; writers emit v2.2 only when rotation state is non-default
-to preserve byte-equivalence with legacy v2.1 readers in the common
-case. Before the first v2.2 file is written, verify that legacy's
-top-level envelope `extra="forbid"` (if any) tolerates the additive
-`source.rotation_degrees` / `source.rotation_source` fields — the
-fields are **inside `source`**, not at the envelope root, so legacy's
-root-level strictness does not apply. If legacy's `Source` model
-also forbids extras, fall back to sidecar `<project>_<page:03d>.rotation.json`
-per Q-A1 option (B) with auto-cleanup on next legacy save.
-
-```jsonc
-{
-  "schema": {"name": "pd_ocr_labeler.user_page", "version": "2.1"},
-  "provenance": {
-    "saved_at": "2026-05-06T12:34:56.789Z",
-    "saved_by": "Save Page",        // human-readable trigger label
-    "source_lane": "labeled",       // "labeled" | "cached" — legacy enum
-    "app": {"name": "pdomain_ocr_labeler_spa", "version": "...", "git_commit": "..."},
-    "toolchain": {
-      "python": "3.13.x",
-      "pdomain_book_tools": "...",
-      "opencv_python": "..."
-    },
-    "ocr": { /* OCRProvenance: engine, engine_version, models[], config_fingerprint */ }
-  },
-  "source": {
-    "project_id": "...",
-    "page_index": 0,
-    "page_number": 1,
-    "image_path": "relative/to/project_root.png",
-    "project_root": "...absolute...",
-    "image_fingerprint": {
-      "size": 12345,
-      "mtime_ns": 123456789,
-      "sha256": "..."
-    }
-  },
-  "payload": {
-    "page": { /* pdomain_book_tools.ocr.page.Page.to_dict() — verbatim */ },
-    "original_page": { /* optional pre-edit snapshot */ },
-    "word_attributes": {
-      "<word_id>": {"italic": false, "small_caps": false, ...}
-    }
-  },
-  "cached_images": {
-    "original": "<project>_<page:03d>_original_<hash>.jpg",
-    "lines":    "<project>_<page:03d>_lines_<hash>.jpg",
-    "paragraphs": "<project>_<page:03d>_paragraphs_<hash>.jpg",
-    "words":    "<project>_<page:03d>_words_<hash>.jpg",
-    "matched_words": "<project>_<page:03d>_matched_words_<hash>.jpg"
-  }
-}
-```
-
-Reader (`src/pdomain_ocr_labeler_spa/core/persistence/user_page_envelope.py`):
-
-- `is_user_page_envelope(data)` type guard.
-- `parse_envelope(data) -> UserPageEnvelope` Pydantic-validating loader.
-- `build_envelope(page, page_record, project, *, source_lane, saved_by, update_page_source) -> dict` writer.
-- Round-trip test: load → write → load equals first load (golden file).
-
-The legacy `payload.word_attributes` side channel is preserved on both
-read and write. **Don't drop this** even though `Page.to_dict()`
-already encodes the same info — older saves are read-only without it.
+Typography authoring uses the current head and correction journal, not `ApplyStyleRequest` or character ranges.
+Legacy `text_style_labels` still exists as a read-only wire field; its presence does not restore direct style writes.
+The generated OpenAPI schema and `frontend/src/api/types.ts` define the complete current payload, including
+page-load jobs, errors and history. The excerpts above are a domain guide, not an exhaustive wire schema.
 
 ### `project.json`
 

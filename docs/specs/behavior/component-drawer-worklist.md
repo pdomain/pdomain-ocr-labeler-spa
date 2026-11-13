@@ -3,7 +3,7 @@ kind: spec
 status: active
 owner: maintainers
 created: 2026-06-01
-last_verified: 2026-07-13
+last_verified: 2026-11-13
 ---
 
 # Behavior unit spec - Drawer worklist and hierarchy
@@ -167,6 +167,12 @@ last_verified: 2026-07-13
 ## Known regressions
 
 - None captured yet.
+
+## Implementation reconciliation (2026-11-13)
+
+Selected lines scope mark-reviewed. Reload and export operate on the page even without a selection.
+Canonical selection helpers, checkboxes, request-error toasts, optional block hierarchy and drawer counts
+are implemented; old empty-tree timing failures must not become soft skips.
 
 ## Adversarial Review
 

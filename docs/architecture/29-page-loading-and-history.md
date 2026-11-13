@@ -3,7 +3,7 @@ kind: architecture
 status: built
 owner: maintainers
 created: 2026-11-07
-last_verified: 2026-11-12
+last_verified: 2026-11-13
 ---
 
 # Page loading and version history
@@ -54,13 +54,23 @@ a rotation. The content blob is read first, so a missing blob leaves the slot wh
 the display-width query. `GET` of the image still sends `Cache-Control: public, max-age=3600`, so a browser can
 keep the previous image until that hour ends.
 
-`POST /api/projects/{project_id}/maintenance/prune` unlinks only the blob names the
-[undo spec](../specs/2026-06-12-event-store-undo.md) marks dead in the snapshot taken before the walk. A file
-created after that snapshot stays. The live cursor and the redo blobs above it stay when a jump sits below the
+`POST /api/projects/{project_id}/maintenance/prune` snapshots blob names before walking aggregates reachable
+from the current project page slots. A content hash is a candidate only when every scanned node referring to
+it as content is prunable and no scanned image/preprocess reference protects it. Current aggregates prune
+versions below the protected cursor/undo floor and expired dead segments; noncurrent aggregates require
+expired lineage retention. Only snapshot candidates are unlinked. A file created after that snapshot stays. The
+live cursor and the redo blobs above it stay when a jump sits below the
 undo floor, and a non-positive undo depth uses the same default of 50 as undo. Image and preprocess hashes,
 unknown files, and lineage-reachable aggregates inside the retention window stay. Retention defaults to 30 days
 (`PDLABELER_PRUNE_RETENTION_DAYS`). Prune does not run on a write. `PDLABELER_PRUNE_ON_OPEN` defaults to false.
 U-M7, the visible history list and jump action, is unchanged.
+
+The walk does not discover a successor aggregate whose forward link was severed by a later re-OCR. Its
+unrecognized blob files remain protected as unknown. Discovering those unreachable aggregates and proving
+expired-branch deletion followed by successful reload/undo remain unfinished parts of the
+[undo spec](../specs/2026-06-12-event-store-undo.md), not an accepted replacement retention policy. Existing
+browser coverage checks that boundary undo is offered; it does not yet exercise the full restored
+canvas/worklist/right-panel acceptance flow.
 
 ## Evidence
 
@@ -73,3 +83,13 @@ U-M7, the visible history list and jump action, is unchanged.
   `tests/unit/core/test_page_prune.py`, and `tests/e2e/test_history_panel.py` cover history behavior.
 - Verified: 2026-11-07 by source and test inspection; history UI landed in `44b52257` and loading in `9768576`.
   Lineage undo and conservative prune were checked against those tests on 2026-11-12.
+
+### Pruning verification scope
+
+- Code: `core/page_prune.py::live_blob_names` and `prune_store`, `core/page_lineage.py::link_replacement`.
+- Tests: `tests/integration/test_history_undo_redo.py::test_reocr_undo_crosses_back_to_the_edited_page` and
+  `test_rotation_boundary_undo_uses_the_rotate_lineage` exercise actual HTTP traversal.
+- Tests: `tests/unit/core/test_page_prune.py::test_expired_dead_branch_and_abandoned_version_blobs_leave_the_live_set`
+  covers the pure candidate calculation. The HTTP prune test verifies immediate retention, not the complete
+  expired/unreachable retention contract.
+- Verified: 2026-11-13 by reading implementation and tests; no new browser traversal run is claimed.

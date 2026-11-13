@@ -3,7 +3,7 @@ kind: architecture
 status: built
 owner: maintainers
 created: 2026-05-06
-last_verified: 2026-07-13
+last_verified: 2026-11-13
 ---
 
 # 04 — Image Viewport (Left Pane)
@@ -29,63 +29,16 @@ erase) and persistent layer-visibility / selection-mode prefs.
 
 ## 0. Implementation choice — research spike at M4 start (D-020)
 
-The renderer choice (Konva vs raw `<canvas>` vs SVG) is **deferred**.
-At the start of M4, run a research spike with a real labeled-data
-fixture (~200 lines × ~20 words = ~600 word rects per page across 4
-layers) and pick the renderer that holds 60Hz on drag-move with no
-jank.
-
-Default-of-record: **raw `<canvas>` + custom hit-testing** (D-020 / Q6
-answer). The component map below is written for Konva because it's
-the more portable contract; if the spike picks raw canvas, replace
-the `<Stage>/<Layer>/<Rect>` skeleton with an imperative paint
-function. The bbox layout, color palette, modes, and event semantics
-are unchanged across renderers.
-
-The decision happens in M4. Document the result in a new ADR.
+The renderer choice is shipped: `PageImageCanvas.tsx` mounts the shared `PdUiPageImageCanvas` Konva host.
+The host owns the Stage and layer skeleton; Labeler supplies domain overlays, hit testing and gestures.
+`BBoxOverlay` delegates rectangles to the shared `RectOverlayLayer`. The original M4 decision is history;
+see [renderer ownership](21-konva-renderer.md).
 
 ## 1. Component map (Konva sketch — actual choice in M4)
 
-> **D-050/D-053 (shipped):** `ImageTabsHeader` was retired. Layer-visibility
-> controls now live in the Rail (`rail-layer-*` buttons). Selection-mode and
-> zoom controls live in the canvas overlay (`canvas-zoom-fit`, `canvas-zoom-100`,
-> `mismatches-only-toggle`). `add-word-button` remains in the canvas overlay. Erase
-> mode is selected in the Rail with `rail-mode-erase`.
-
-```
-<Rail />                                       (components/shell/Rail.tsx)
-  rail-layer-block, rail-layer-para, rail-layer-line, rail-layer-word (aria-pressed)
-  rail-target-block, rail-target-para, rail-target-line, rail-target-word (data-active)
-<PageImageCanvas />                            (components/PageImageCanvas.tsx)
-    <Stage>
-      <Layer name="image">
-        <Image src={page.image_url} />
-      </Layer>
-      <Layer name="overlays">
-        <BBoxOverlay layer="paragraphs" />
-      </Layer>
-      <Layer name="overlays">
-        <BBoxOverlay layer="lines" />
-      </Layer>
-      <Layer name="overlays">
-        <BBoxOverlay layer="words" />
-      </Layer>
-      <Layer name="selection">
-        <BBoxOverlay layer="selection-paragraphs" />
-        <BBoxOverlay layer="selection-lines" />
-        <BBoxOverlay layer="selection-words" />
-      </Layer>
-      <Layer name="drag">
-        <DragRect />
-      </Layer>
-    </Stage>
-```
-
-The `<Stage>` is sized to `(encoded.display_width, encoded.display_height)`
-from `PagePayload.encoded`. The wrapping div fills the available
-horizontal space and adds `overflow: auto` for vertical scrolling.
-
----
+The shared PageImageCanvas host owns Stage/bitmap/focus/scale. Labeler fills selection/tool slots with
+BBoxOverlay, block/region overlays and mode gestures. Hidden DOM geometry sidecars serve automation.
+The right panel is the editor; it does not require a second Stage or a word-edit modal.
 
 ## 2. Viewport Controls (re-homed from retired ImageTabsHeader — D-050/D-053)
 
@@ -119,8 +72,9 @@ Bound to `railStore.target` / `useUiPrefs.selectionMode`. Default: `word`.
 - **Zoom Fit** — `canvas-zoom-fit` (replaces `zoom-fit-button`).
 - **Zoom 100%** — `canvas-zoom-100` (replaces `zoom-100-button`).
 
-Layer colors (RGBA verbatim from legacy
-`image_tabs.py:280-285,500-535`):
+Current layer colors resolve theme CSS aliases through useLayerColors and the shared RectOverlayLayer.
+The palette below is a historical legacy comparison, not the current token contract
+(`image_tabs.py:280-285,500-535`):
 
 | Layer | Fill | Border | Stroke (selection) |
 |---|---|---|---|
@@ -134,38 +88,17 @@ Tag-chip colors (used in `WordMatchView`, repeated here for cross-ref):
 - Style chips: bg `#e7f0ff`, border `#b8ccf3`, color `#1f4b99`.
 - Component chips: bg `#e7f8ee`, border `#b7dfc3`, color `#1f6b3a`.
 
-`mix-blend-mode: multiply` is applied to the overlay layers so the
-underlying image stays visible — match exact via Konva
-`globalCompositeOperation = 'multiply'` on the `<Layer>`.
+Current composition belongs to the shared host/overlay implementation. Do not infer an exact blend-mode
+requirement from the historical palette. PageImageCanvas.test.tsx verifies CSS-token fallback mode colors.
 
 ---
 
 ## 3. Coordinates
 
-The Konva Stage works in **display pixels**. The backend works in
-**source pixels**. Translate via `PagePayload.encoded`:
-
-```ts
-const scale = page.encoded.scale;   // display_width / src_width
-function srcToDisplay(b: BBox): BBox {
-  return { x: b.x*scale, y: b.y*scale, width: b.width*scale, height: b.height*scale };
-}
-function displayToSrc(b: BBox): BBox {
-  return { x: Math.round(b.x/scale), y: Math.round(b.y/scale), width: ..., height: ... };
-}
-```
-
-The Stage size is `display_width × display_height` (from `encoded`).
-The image source is `image_url` (the cached `original` overlay,
-already at `display_width`). Match exactly so the bbox rects line up
-without sub-pixel drift.
-
-`encoded.display_width` is `min(src_width, 1200)` (legacy
-`_compute_encoded_dimensions:962`). Image cache is keyed by the
-encoded image's content hash, so the SPA reads bytes that round-trip
-the same algorithm.
-
----
+Geometry mutations use source-pixel boxes. `lib/coords.ts` handles source/display encoding transforms;
+the shared host supplies effective pointer scale including viewport zoom. Encoded-image scale and zoom
+are distinct and must not be applied twice. Existing tests cover round-trip geometry within one pixel.
+PageImageCanvas passes the source geometry to the current rebox/add/erase handlers.
 
 ## 4. Modes
 
@@ -252,6 +185,9 @@ clears.
 
 ## 6. Hotkeys (viewport-scope)
 
+The viewport actions register at document scope through `useHotkey`, with an enabled flag.
+Viewport ownership here describes the action, not a requirement that the canvas hold keyboard focus.
+
 Registered via `useHotkey` only when the canvas has focus
 (implementation: tabindex=0 wrapper + `:focus` selector or React
 event handlers). See [`12-hotkeys-a11y.md`](12-hotkeys-a11y.md).
@@ -307,16 +243,11 @@ These are **new** — the legacy has no viewport hotkeys
 
 ## 9. Open issues
 
-- **Word-rebox UI conflict.** When the dialog is open AND mode is
-  `rebox`, where does the Stage live? Options: (a) keep the main
-  viewport's Stage in `rebox` mode; the user dismisses the dialog
-  while rebox happens. (b) embed a smaller Stage inside the dialog.
-  Spec author's bet: **(a)** — the dialog is closed for the duration
-  of the rebox drag, then reopened with the new bbox preview.
-  Confirm in M7 implementation.
-- **Drag throttling.** The legacy redraws on every server-side mousemove
-  (websocket roundtrip!). The SPA can throttle to ~60Hz client-side
-  with `requestAnimationFrame`. Implement and benchmark in M4.
+Word editing is mounted in the right panel. `ReboxSection` owns draft geometry and Apply rebox; a viewport
+rebox drag uses the main shared Stage. There is no word-edit dialog/secondary-Stage decision left to make.
+
+The performance budgets above are targets. This source inspection does not establish a fresh 60 Hz benchmark
+or a new drag-throttling result.
 
 ## 10. Closed decisions
 

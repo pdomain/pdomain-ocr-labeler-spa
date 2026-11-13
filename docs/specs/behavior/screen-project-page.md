@@ -3,7 +3,7 @@ kind: spec
 status: active
 owner: maintainers
 created: 2026-06-01
-last_verified: 2026-07-13
+last_verified: 2026-11-13
 ---
 
 # Behavior unit spec - Project page
@@ -13,7 +13,7 @@ last_verified: 2026-07-13
   `/projects/:projectId/pages/index/:pageIndex`
 - **UI definition:** none - existing stable UI documented in
   `docs/architecture/03-frontend.md`, `13-driver-contract.md`,
-  `22-page-surface-wireup.md`, and `runtime-flows.md`
+  `24-shell-layout.md`, and `runtime-flows.md`
 - **Parent unit(s):** app shell
 - **Child unit(s):** studio shell, canvas, drawer worklist, right panel,
   page actions, dialogs
@@ -154,6 +154,12 @@ last_verified: 2026-07-13
 ## Known regressions
 
 - None captured yet.
+
+## Implementation reconciliation (2026-11-13)
+
+ProjectPage mounts AppShell chrome and its own body grid, not StudioShell. Cold page loading uses the
+document-pane status surface; it does not show the whole-project loading overlay. Opening a project can
+ingest the first page and initialize `.pd-pages`; this is distinct from a user text-edit mutation.
 
 ## Adversarial Review
 

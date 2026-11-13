@@ -3,7 +3,7 @@ kind: architecture
 status: built
 owner: maintainers
 created: 2026-05-06
-last_verified: 2026-07-13
+last_verified: 2026-11-13
 ---
 
 # 02 — Backend (FastAPI)
@@ -13,7 +13,7 @@ last_verified: 2026-07-13
 > **Spec-Issue**: pdomain/pdomain-ocr-labeler-spa#8
 
 The Python side of `pdomain-ocr-labeler-spa`. Ships as a single wheel; the
-`pdomain-ocr-labeler-spa-ui` console script boots a `uvicorn` server that
+`pdomain-ocr-labeler-ui` console script boots a `uvicorn` server that
 serves both the API and the bundled SPA.
 
 This spec is the source of truth for **every endpoint contract**. If
@@ -23,102 +23,23 @@ the implementation diverges, the spec is wrong — fix the spec first.
 
 ## 1. Module layout
 
-```
-src/pdomain_ocr_labeler_spa/
-├── __init__.py             # version probe via importlib.metadata
-├── __main__.py             # console-script entry → uvicorn
-├── bootstrap.py            # build_app(settings)
-├── settings.py             # pydantic-settings (PDLABELER_* env)
-├── api/
-│   ├── __init__.py
-│   ├── healthz.py          # GET /healthz
-│   ├── env_js.py           # GET /env.js
-│   ├── dependencies.py     # get_storage / get_app_state / get_user
-│   ├── middleware/
-│   │   ├── __init__.py
-│   │   ├── error_handler.py
-│   │   └── request_id.py
-│   ├── projects.py         # /api/projects/*
-│   ├── pages.py            # /api/projects/{pid}/pages/*
-│   ├── words.py            # /api/projects/{pid}/pages/{idx}/words/*
-│   ├── lines.py            # /api/projects/{pid}/pages/{idx}/lines/*
-│   ├── paragraphs.py       # /api/projects/{pid}/pages/{idx}/paragraphs/*
-│   ├── refine.py           # /api/projects/{pid}/pages/{idx}/refine
-│   ├── ocr_config.py       # /api/ocr-config
-│   ├── export.py           # /api/projects/{pid}/export
-│   ├── jobs.py             # /api/jobs/*
-│   └── notifications.py    # /api/notifications/stream (SSE)
-├── adapters/
-│   ├── __init__.py
-│   ├── storage/{base,filesystem,__init__}.py
-│   ├── auth/{base,none_,__init__}.py
-│   └── ocr/{base,local_doctr,modal,shared_container,__init__}.py
-├── core/
-│   ├── __init__.py
-│   ├── models.py           # domain models (see 01-data-models.md)
-│   ├── app_state.py        # AppState
-│   ├── project_state.py    # ProjectState
-│   ├── page_state.py       # PageState (the heavy-lifting class)
-│   ├── line_match.py       # build LineMatch + WordMatch from a Page
-│   ├── selection.py        # selection state mgmt
-│   ├── notifications.py    # NotificationQueue (in-memory)
-│   ├── jobs/{events,runner,handlers,__init__}.py
-│   ├── persistence/
-│   │   ├── user_page_envelope.py
-│   │   ├── project_envelope.py
-│   │   ├── ground_truth.py
-│   │   ├── session_state.py
-│   │   ├── image_cache.py
-│   │   └── paths.py        # OS-aware roots
-│   ├── ocr/
-│   │   ├── predictor.py    # _get_or_create_predictor + cache
-│   │   ├── provenance.py
-│   │   └── model_selection.py
-│   ├── pgdp_normalize.py   # PGDPResults wrapper
-│   └── logging_config.py
-└── static/                 # populated by `just frontend-build` (.gitignored)
-```
-
-Where this differs from pgdp-prep:
-
-- No `dispatcher/`, no `core/queue/single_executor.py`. Single in-process
-  job runner with an in-memory Job dict.
-- Full `IOCREngine` adapter axis (D-018): `local_doctr | modal | shared_container`.
-  Only `local_doctr` is wired in v1; the other two are `NotImplementedYet`
-  Protocol stubs. Same shape as pgdp-prep, smaller v1 surface.
-- No `database/` adapter axis. We don't need a DB.
-
----
+`bootstrap.py` builds the app; `settings.py` owns configuration. `api/` contains route modules,
+including `pages.py`, `words.py`, `lines_paragraphs.py`, `history.py`, `maintenance.py` and `typography.py`.
+`core/` contains project/page state, the job runner, persistence and history policy. `adapters/ocr/local_doctr.py`
+binds OCR and current page-store loading. The source tree is the module catalogue; the removed scaffold
+filenames are not implementation work to recreate.
 
 ## 2. App factory
 
-`src/pdomain_ocr_labeler_spa/bootstrap.py` exports `build_app(settings: Settings | None = None) -> FastAPI`.
+`bootstrap.py::build_app(settings)` wires FastAPI, settings, adapters, brokers and the job runner.
+`core/app_state.py::AppState` is a frozen wiring dataclass. ActiveProjectCarrier and ProjectState hold the
+separate active-project/page state; lifecycle and discovery are wired by the factory rather than methods
+on that dataclass. Routes and error handlers are installed before the reserved-path SPA fallback.
 
-Order:
-
-1. `configure_logging(settings.log_format)`.
-2. Build adapters: `IStorage`, `IAuth`, `IOCREngine`.
-3. Build `JobEventBroker` + `JobRunner`.
-4. Build `AppState(settings, storage, auth, ocr_engine, broker, runner)`.
-5. Define `lifespan` async ctx mgr that:
-   - `await app_state.startup()` — discovers projects, restores session.
-   - `task = asyncio.create_task(runner.run_forever())`
-   - on shutdown: `await runner.stop()`, await task, `await app_state.shutdown()`.
-6. `FastAPI(title="pdomain-ocr-labeler-spa", lifespan=lifespan)`.
-7. Add `CORSMiddleware(allow_origins=settings.cors_allowed_origins, ...)` (F-002: explicit allowlist).
-   Add `LocalTrustMiddleware` after CORS (guards `/api/fs/ls` + `/api/projects/source-root`).
-8. Add `RequestIdMiddleware` last (becomes outermost).
-9. Stash adapters + state on `app.state`.
-10. Install error handlers + every router.
-11. Install `/healthz` (BEFORE the SPA mount).
-12. If `mode != "api_only"`, install `/env.js`, `/image-cache` static
-    mount via the `IStorage` adapter ([D-019](../../specs/17-decisions.md)), and SPA fallback.
-
-The factory is pure — same `Settings` always produces the same wired
-graph. Errors (e.g. unreadable data root) are loud `RuntimeError` at
-wire time, not at request time.
-
----
+The app installs explicit CORS, local-trust and request-ID middleware. Image-cache and blob routes are
+separate from the SPA shell. Page events/blobs persist locally; the job table remains in memory.
+See [persistence](09-persistence.md), [history/loading](29-page-loading-and-history.md), and
+`bootstrap.py::build_app` for the complete current wiring order.
 
 ## 3. Settings
 
@@ -238,6 +159,12 @@ representation. The driver-facing URL bar still uses 1-based
 ---
 
 ## 5. Endpoint contract (canonical list)
+
+The generated OpenAPI schema is the exhaustive contract. This section groups selected routes.
+Typography journal routes in `api/typography.py`, history, region/page-kind review, automation, PGDP and
+source-alignment routers are installed by `bootstrap.py`; they are not all enumerated below. Direct word
+`/style` and `/style-batch` authoring routes are removed. Cold page misses submit a `load_page` job;
+warm store hits return without one. See [page loading](29-page-loading-and-history.md).
 
 > Every endpoint declares request/response Pydantic models that map to
 > the wire shapes in [`01-data-models.md`](01-data-models.md).
@@ -429,64 +356,11 @@ delete). Single-word style/validate/nudge/crop/refine return just the updated
 
 ## 6. Dependencies (FastAPI `Depends`)
 
-`api/dependencies.py`:
-
-```python
-def get_settings(request: Request) -> Settings:
-    return request.app.state.settings
-
-
-def get_storage(request: Request) -> IStorage:
-    return request.app.state.storage
-
-
-def get_auth(request: Request) -> IAuth:
-    return request.app.state.auth
-
-
-def get_ocr_engine(request: Request) -> IOCREngine:
-    return request.app.state.ocr_engine
-
-
-def get_app_state(request: Request) -> AppState:
-    return request.app.state.app_state
-
-
-def get_job_runner(request: Request) -> JobRunner:
-    return request.app.state.job_runner
-
-
-def get_job_events(request: Request) -> JobEventBroker:
-    return request.app.state.job_events
-
-
-async def get_user(request: Request) -> UserContext:
-    auth: IAuth = request.app.state.auth
-    creds = await HTTPBearer(auto_error=False)(request)
-    try:
-        return await auth.verify(creds)
-    except AuthError as e:
-        raise HTTPException(401, str(e))
-```
-
-Routes consume:
-
-```python
-@router.get("/{project_id}/pages/{page_index}", response_model=PagePayload)
-async def get_page(
-    project_id: str,
-    page_index: int,
-    line_filter: LineFilter = LineFilter.UNVALIDATED,
-    user: UserContext = Depends(get_user),
-    state: AppState = Depends(get_app_state),
-) -> PagePayload: ...
-```
-
-`get_user` is consumed by every route; `auth.none_` returns the same
-anonymous `UserContext("local", "Local User")` for every call
-([D-005](../../specs/17-decisions.md)).
-
----
+Routes use helpers in `api/dependencies.py` to obtain configured services and state. The AppState wiring
+object is distinct from the active-project carrier and per-page ProjectState. Page mutation handlers use
+the per-page threading RLock; page payload reads use the same boundary where model reads have side effects.
+Auth remains the local no-auth implementation under D-042; this documentation does not authorize remote
+authentication or managed deployment adapters.
 
 ## 7. Adapter Protocols
 

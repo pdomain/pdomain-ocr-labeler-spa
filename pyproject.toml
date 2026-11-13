@@ -124,6 +124,37 @@ source = "vcs"
 # sdist and applies the per-target artifact spec against that dir.
 artifacts = ["src/pdomain_ocr_labeler_spa/static/**/*"]
 
+[tool.hatch.build.targets.sdist]
+# Generated workspace state must never enter a source release.
+exclude = [
+    ".docgraph",
+    ".worktrees",
+    ".venv*",
+    "venv",
+    "node_modules",
+    "__pycache__",
+    ".cache",
+    ".pytest_cache",
+    ".ruff_cache",
+    ".mypy_cache",
+    ".basedpyright",
+    ".vite",
+    ".hypothesis",
+    ".tox",
+    ".nox",
+    ".superpowers",
+    ".ship-issue-tmp",
+    ".pdlabeler-port",
+    "htmlcov",
+    "test-results",
+    "playwright-report",
+    "/frontend/coverage",
+    "/frontend/dist",
+    "*.tsbuildinfo",
+    ".ci-ai.log",
+    ".coverage*",
+]
+
 [tool.hatch.build.targets.wheel]
 packages = ["src/pdomain_ocr_labeler_spa"]
 # The global `artifacts` above also covers this target; no additional per-wheel

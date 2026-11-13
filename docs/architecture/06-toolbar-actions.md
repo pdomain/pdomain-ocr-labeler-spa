@@ -3,7 +3,7 @@ kind: architecture
 status: built
 owner: maintainers
 created: 2026-05-06
-last_verified: 2026-07-13
+last_verified: 2026-11-13
 ---
 
 # 06 — Toolbar Action Grid
@@ -163,19 +163,9 @@ selection.
 
 ## 6. Notifications + jobs
 
-Long-running actions (page-scope refine in particular) return `202`
-with a `job_id`. The toolbar shows a subtle progress indicator on the
-scope row while the job runs.
-
-```
-Page row: [bar progress 60%]   when refine is mid-flight
-```
-
-Implementation: subscribe to `useJobProgress(jobId)`. While
-`status === "running"`, show a slim line under the row; on completion,
-toast.success and dismiss.
-
----
+Successful actions invalidate the page query; word merge also repairs selection. Failures surface as
+toasts. The mounted grid has no per-scope-row job-progress bar. Its collapsible mount is separate from
+TextTabs. Adjacent-word Merge is implemented and its disabled reasons are tested by ToolbarActionGrid.test.tsx.
 
 ## 7. Hotkeys
 
@@ -211,12 +201,7 @@ point.
 
 ## 9. Open issues
 
-- **`scope_select="part"` semantics.** When the user picks "part"
-  scope and applies italics, the legacy applies it to the *first half*
-  of the selected text, not the whole word. The SPA preserves this —
-  but it's a weird UX. Consider replacing with explicit `part_left` /
-  `part_right` options in v2. Out of scope for v1.
-- **Disabled-state lag.** The disabled-state recomputes synchronously
-  on every selection change. With ~30 buttons × ~50 selection events
-  per second during a drag, this could matter. Profile in M6 and
-  optimise with `useMemo` on selection-shape signature if needed.
+The toolbar does not author typography; the old `scope_select="part"` style question is superseded by
+TypographySection and the correction journal. Disabled-state performance remains a profiling consideration,
+not evidence that a new memoization design is required. Current availability and mapping are implemented in
+`useToolbarButtonStates.ts` and `toolbarMapping.ts`, with corresponding tests.

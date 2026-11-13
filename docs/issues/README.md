@@ -2,7 +2,7 @@
 Status: active
 Owner: maintainers
 Created: 2026-07-19
-Last verified: 2026-11-11
+Last verified: 2026-11-13
 Kind: process
 Level: I1
 ---
@@ -14,7 +14,7 @@ Level: I1
 - **Kind:** process
 - **Status:** active
 - **Level:** I1
-- **Last verified:** 2026-11-11
+- **Last verified:** 2026-11-13
 - **Read when:** filing a bug / defect / investigation report, or looking up an
   open issue's status, evidence, or resolution.
 - **Search terms:** issues folder, bug report, defect report, issue template,
@@ -92,7 +92,8 @@ issues may still be open.
 ## Deep-review split issues (2026-07-21)
 
 Current work is summarized in [current state](../context/current-state.md). The July deep-review plan is retired.
-All six findings in [the findings record](../context/open-findings.md), including XDG paths, empty OCR, and
+All six findings in [the findings record](../decisions/2026-11-13-retire-completed-doc-inventories.md), including
+XDG paths, empty OCR, and
 hierarchy waits, were closed on 2026-09-18.
 
 ### Wave 0 — data integrity

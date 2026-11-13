@@ -3,7 +3,7 @@ kind: process
 status: active
 owner: maintainers
 created: 2026-05-06
-last_verified: 2026-07-13
+last_verified: 2026-11-13
 ---
 
 # Development
@@ -68,8 +68,8 @@ mise — the wheel ships with the SPA bundle prebuilt.)
 
 The FastAPI side is fully wired: SPA fallback, `/healthz`, `/env.js`,
 `/image-cache/{key:path}`, request-id middleware, structured logging.
-Until the frontend bundle is built (next iteration), `GET /` will
-return a helpful 404 explaining how to populate `static/`.
+When the frontend bundle is missing, `GET /` returns a diagnostic 503. `just run` builds the bundle
+when needed; a direct backend-only development launch can run without it.
 
 ```sh
 just test            # pytest — main backend feedback loop
@@ -145,7 +145,8 @@ This keeps the TypeScript surface in lock-step with the Python models.
 just ci   # locked setup, Python/frontend checks, tests, behavior coverage, build, strict docgraph
 ```
 
-Mirrors the `.github/workflows/release.yml` pipeline.
+This is the local repository gate. Release runs through the [local release script](../runbooks/release.md);
+the former GitHub workflows are removed.
 
 ## Record outcomes on close
 

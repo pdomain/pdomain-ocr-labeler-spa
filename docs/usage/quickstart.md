@@ -3,7 +3,7 @@ kind: usage
 status: active
 owner: maintainers
 created: 2026-06-01
-last_verified: 2026-07-13
+last_verified: 2026-11-13
 ---
 
 # Quickstart
@@ -44,27 +44,22 @@ The server starts, prints its listen address, and opens a browser tab.
 
 **Default:** `http://127.0.0.1:8080`
 
-If port 8080 is in use the server auto-selects the next free port and prints
-a notice (`Port 8080 in use - starting on port NNNN`).
+When no port is explicitly set, a busy 8080 triggers the next-free-port scan and a notice.
+A busy port explicitly supplied by CLI or PDLABELER_PORT is an error. Valid explicit ports are 1–65535.
 (`src/pdomain_ocr_labeler_spa/__main__.py:314-326`, source-checked 2026-06-01)
 
 ---
 
 ## Point at a book directory
 
-From the browser, use the project picker to select the directory that contains
-your book's page images and OCR data. The book directory is the one that holds
-subfolders like `page-images/` or an existing `session_state.json`.
+Set the parent source folder with `--projects-root /path/to/books`, then select one of its book
+subdirectories in the browser. A filesystem-image book has its `.png`, `.jpg` or `.jpeg` files directly
+in that directory. A supported immutable book source has `book-labeling-manifest.json` or
+`labeling-bundle.json`. `session_state.json` belongs under the application data root, not inside a book.
 
-Alternatively, pass the directory on the command line:
-
-```sh
-pdomain-ocr-labeler-ui /path/to/your/book
-```
-
-This loads the book immediately, bypassing the project picker.
-
----
+The optional positional directory sets startup carrier state; it does not establish a verified bypass
+of the browser's project picker. Use the source-root setting and explicit project selection for the
+documented path. Loads outside the effective source root are rejected.
 
 ## Key flags
 
@@ -74,9 +69,10 @@ This loads the book immediately, bypassing the project picker.
 | `--host HOST` | Bind to a specific interface (default `127.0.0.1`) |
 | `--no-browser` | Suppress automatic browser tab |
 | `--data-root PATH` | Override the default data root |
+| `--projects-root PATH` | Parent directory whose subdirectories are selectable books |
 
-All flags are also readable from environment variables with the `PDLABELER_`
-prefix.
+Only Settings fields have environment counterparts. For example, `--projects-root` maps to
+`PDLABELER_SOURCE_PROJECTS_ROOT`. `--no-browser` and `--reload` are CLI-only switches.
 
 ---
 
@@ -100,10 +96,11 @@ that directory instead of starting empty, and says so at startup. See
 
 ## Console entry points
 
-The wheel installs two commands:
+The wheel installs the UI, control CLI and export CLI:
 (`pyproject.toml:46-48`, source-checked 2026-06-01)
 
 - `pdomain-ocr-labeler-ui` - starts the server (described above).
+- `pdomain-ocr-labeler-control` - control CLI; run with `--help` for usage.
 - `pdomain-ocr-labeler-spa-export` - headless export CLI; run with `--help` for
   usage.
 

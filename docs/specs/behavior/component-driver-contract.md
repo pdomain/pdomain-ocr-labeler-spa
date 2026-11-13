@@ -3,7 +3,7 @@ kind: spec
 status: active
 owner: maintainers
 created: 2026-06-01
-last_verified: 2026-07-13
+last_verified: 2026-11-13
 ---
 
 # Behavior unit spec - Driver compatibility contract
@@ -129,6 +129,13 @@ last_verified: 2026-07-13
 ## Known regressions
 
 - None captured yet.
+
+## Implementation reconciliation (2026-11-13)
+
+The mounted driver contract uses visible effectful controls. The old hidden PageActions/header wrappers
+are removed; intentional invalid toolbar cells remain disabled/stubbed. The word-edit replacement is
+WordDetail in the right panel, covered by `tests/e2e/test_project_page_smoke.py::test_word_edit_dialog_lifecycle`
+(the historical test name remains). Selector presence alone does not prove a backend mutation.
 
 ## Adversarial Review
 

@@ -3,7 +3,7 @@ kind: process
 status: active
 owner: maintainers
 created: 2026-05-09
-last_verified: 2026-11-12
+last_verified: 2026-11-13
 ---
 
 # AGENTS — pdomain-ocr-labeler-spa

@@ -1,5 +1,5 @@
 ---
-last_verified: 2026-11-07
+last_verified: 2026-11-13
 created: 2026-08-08
 owner: maintainers
 kind: spec

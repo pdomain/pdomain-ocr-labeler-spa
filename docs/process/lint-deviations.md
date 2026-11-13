@@ -3,7 +3,7 @@ kind: process
 status: active
 owner: maintainers
 created: 2026-05-22
-last_verified: 2026-07-13
+last_verified: 2026-11-13
 ---
 
 # Lint-rule Deviations — pdomain-ocr-labeler-spa
@@ -43,7 +43,9 @@ equivalent; switching would be pure churn.
 
 ### 3. `RUF002` — ruff (ambiguous-unicode-character-docstring)
 
-**Config:** project-wide ignore.
+**Config:** directory-level per-file exceptions remain; the global ignore is removed.
+Their policy conflict with CONVENTIONS.md remains the owner question tracked under #456.
+The original rationale below is historical, not a new approval.
 
 **Justification.** En-dashes (–) appear in spec citations in docstrings
 (e.g., "spec §3 — overview"). These are intentional typography, not
@@ -254,8 +256,6 @@ declared model return type.
 
 - `src/pdomain_ocr_labeler_spa/adapters/storage/filesystem.py:78, :94, :123` —
   `anyio.to_thread.run_sync` call attribute.
-- `src/pdomain_ocr_labeler_spa/core/jobs/handlers/save_project.py:108` —
-  `settings.data_root` dynamic attribute on `app.state`.
 - `src/pdomain_ocr_labeler_spa/core/logging_config.py:149` —
   `handler._pdlabeler_managed = True`.
 
@@ -338,18 +338,9 @@ category in case the same optional-import pattern recurs.
 
 ### 23. `type: ignore[union-attr]` — basedpyright / mypy-compat
 
-**Suppression form:** `# type: ignore[union-attr]` inline.
-
-**Files:**
-
-- `src/pdomain_ocr_labeler_spa/core/model_selection.py:83` —
-  `_selection_reason_annotation.__args__`.
-
-**Justification.** `__args__` exists on `Union` types at runtime but is
-typed as optional (`None` for non-generic types). The access is guarded by
-the annotation structure; the suppression covers the union-member access.
-
----
+The former model-selection `__args__` suppression is removed. `core/model_selection.py` checks for a
+non-None annotation and uses `typing.get_args`. This category records the retired site rather than
+a standing authorization for a union-attribute suppression.
 
 ### 24. `type: ignore[no-untyped-def]` — annotation backlog (mypy-compat codes)
 
@@ -468,19 +459,9 @@ keyboard navigation on open.
 
 ### 29. `@typescript-eslint/no-explicit-any` — ESLint
 
-**Suppression form:** `// eslint-disable-next-line @typescript-eslint/no-explicit-any` inline.
-
-**Files:**
-
-- `frontend/src/components/right-panel/LineDetail.tsx:214, :228` —
-  `any` used on a JSON round-trip comparison path where the types are not
-  exported by the consuming library.
-
-**Justification.** The suppressed code handles a JSON comparison case where
-the type is structurally `any` from the library boundary. A typed alternative
-would require a custom interface that mirrors an undocumented internal.
-
----
+The former LineDetail.tsx JSON-comparison suppressions are removed by warning cleanup `461157b9`.
+Current LineDetail contains neither those eslint-disable sites nor that explicit-any exception.
+This historical category does not authorize a new suppression.
 
 ### 30. `@typescript-eslint/no-non-null-assertion` — ESLint
 
@@ -494,3 +475,12 @@ would require a custom interface that mirrors an undocumented internal.
 **Justification.** The value is guaranteed non-null by the store's initial
 state contract; the selector path cannot return `null` for this key.
 A defensive check would add noise without catching a real bug.
+
+## Current inventory qualifications (2026-11-13)
+
+This inventory is not a blanket approval of every remaining suppression. Annotation/return-type backlog
+and directory RUF002 policy remain unresolved. `core/persistence/config_yaml.py` currently has
+`type: ignore[import-untyped]` sites and a reportUnknownArgumentType site; the older reportMissingImports
+label does not describe all current entries. The existing WordMatchView `use no memo` and single
+react-hooks/incompatible-library exception are the narrow reviewed virtualizer boundary from `461157b9`,
+not permission to suppress unrelated React warnings. No source rule, suppression or limit changed in this pass.

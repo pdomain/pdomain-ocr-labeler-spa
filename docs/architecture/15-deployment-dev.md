@@ -3,7 +3,7 @@ kind: architecture
 status: built
 owner: maintainers
 created: 2026-05-06
-last_verified: 2026-11-06
+last_verified: 2026-11-13
 ---
 
 # 15 — Deployment + Developer Workflow
@@ -28,7 +28,7 @@ Single-line GitHub-Release wheel installer, mirroring pgdp-prep's flow.
 ### Linux / macOS
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/<org>/pdomain-ocr-labeler-spa/master/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/pdomain/pdomain-ocr-labeler-spa/master/install.sh | bash
 ```
 
 `install.sh` does:
@@ -41,7 +41,7 @@ curl -fsSL https://raw.githubusercontent.com/<org>/pdomain-ocr-labeler-spa/maste
 ### Windows
 
 ```pwsh
-iwr -useb https://raw.githubusercontent.com/<org>/pdomain-ocr-labeler-spa/master/install.ps1 | iex
+iwr -useb https://raw.githubusercontent.com/pdomain/pdomain-ocr-labeler-spa/master/install.ps1 | iex
 ```
 
 Same flow, PowerShell-flavoured.
@@ -52,24 +52,10 @@ End users install **once**; future updates re-run the same script.
 
 ## 2. Console scripts
 
-Declared in `pyproject.toml`:
-
-```toml
-[project.scripts]
-pdomain-ocr-labeler-ui = "pdomain_ocr_labeler_spa.__main__:main"
-pdomain-ocr-labeler-spa-export = "pdomain_ocr_labeler_spa.operations.export.cli:main"
-pdomain-ocr-labeler-spa-prefetch = "pdomain_ocr_labeler_spa.prefetch:main"
-```
-
-The legacy `pdomain-ocr-labeler-ui` console script name is preserved so
-end users can swap binaries without re-learning the command. The
-other two scripts get the `-spa-` suffix to avoid collision with
-legacy when both are installed.
-
-(Decision flag: if [Q1](../../OPEN_QUESTIONS.md) resolves "no transition
-period — hard cut", we drop the suffix and shadow the legacy.)
-
----
+`pyproject.toml` installs `pdomain-ocr-labeler-ui`, `pdomain-ocr-labeler-control` and
+`pdomain-ocr-labeler-spa-export`. The export entry point is `core.jobs.handlers.export_cli:main`.
+There is no installed prefetch console script. Python support is `>=3.13,<3.14`. Current dependency
+pins and explicit package-index sources live in the manifest/lock, not copied examples here.
 
 ## 3. Boot
 
@@ -85,9 +71,9 @@ pdomain-ocr-labeler-ui [project_dir]
   --reload                    Enable uvicorn --reload + skip browser
   --no-browser                Don't auto-open browser
   --frontend-dev URL          Vite dev URL (skip static SPA mount)
-  --debugpy                   Listen on 0.0.0.0:5678
+  --debugpy                   Parsed compatibility flag; listener wiring is absent
   --verbose / -v              Count, 0..3
-  --page-timing               Enable page-timing logger
+  --page-timing               Parsed compatibility flag; logger consumer is absent
 ```
 
 Same flag set as legacy + the `--frontend-dev` flag from pgdp-prep.
@@ -163,24 +149,10 @@ The backend and frontend use separate terminals.
 
 ### 4.4 OpenAPI sync
 
-After any backend wire-shape change:
-
-```sh
-just openapi-export   # writes frontend/openapi.json + frontend/src/api/types.ts
-```
-
-CI gate (closes pgdp-prep drift gap):
-
-```yaml
-- run: just openapi-export
-- run: git diff --exit-code frontend/src/api/types.ts
-```
-
-`frontend/openapi.json` is a gitignored intermediate. A diff against it
-cannot fail. The committed artifact is `frontend/src/api/types.ts`.
-
-If the diff is non-empty, CI fails with "regenerate openapi types
-before merging".
+After backend wire-shape edits, run `just openapi-export` and inspect the generated
+`frontend/src/api/types.ts` diff. `frontend/openapi.json` is an ignored intermediate.
+`just ci` regenerates types but does not contain a separate git-diff refusal step, and the hook config
+does not install the old proposed pre-push openapi-drift hook.
 
 ### 4.5 Tests
 
@@ -209,56 +181,10 @@ just pre-commit-check    # all configured pre-commit hooks
 
 ### 5.1 Wheel
 
-```sh
-just build               # OpenAPI + frontend-build + uv build --sdist + uv build --wheel
-```
-
-Produces `dist/pdomain_ocr_labeler_spa-<version>-py3-none-any.whl` containing
-the built SPA under `pdomain_ocr_labeler_spa/static/`.
-
-`pyproject.toml` highlights:
-
-```toml
-[build-system]
-requires = ["hatchling", "hatch-vcs"]
-build-backend = "hatchling.build"
-
-[project]
-name = "pdomain-ocr-labeler-spa"
-dynamic = ["version"]
-requires-python = ">=3.13,<4.0"
-dependencies = [
-    "fastapi",
-    "uvicorn[standard]",
-    "pydantic>=2.7",
-    "pydantic-settings",
-    "python-multipart",
-    "anyio",
-    "sse-starlette",
-    "huggingface_hub>=0.24",
-    "pdomain-book-tools>=0.1.0",
-    "PyYAML",
-    "numpy",
-    "opencv-python",
-    "torch",
-    "torchvision",
-]
-
-[project.optional-dependencies]
-cuda = []                # placeholder
-
-[tool.uv.sources]
-pdomain-book-tools = { git = "https://github.com/<org>/pdomain-book-tools.git", tag = "v0.10.0" }
-
-[tool.hatch.version]
-source = "vcs"
-
-[tool.hatch.build.targets.wheel.force-include]
-"src/pdomain_ocr_labeler_spa/static" = "pdomain_ocr_labeler_spa/static"
-
-[tool.hatch.build.hooks.custom]
-path = "build_hooks/spa_check.py"
-```
+`just build` runs OpenAPI export/frontend build, then explicit `uv build --sdist` and `uv build --wheel`.
+Global Hatch artifacts include `src/pdomain_ocr_labeler_spa/static/**/*` in both artifacts. The manifest
+uses hatchling plus hatch-vcs and the configured Python range; there is no git-tag dependency source to
+recreate from an old example. See `pyproject.toml` and [repository boundaries](30-repository-boundaries.md).
 
 ### 5.2 Build hook (SPA presence assertion)
 
@@ -279,117 +205,40 @@ class SpaCheckHook(BuildHookInterface):
 
 ### 5.3 Sdist
 
-Wheel-only is the supported install path. `pyproject.toml` declares
-sdist-omits via `.gitignore` (`static/` is gitignored). Building an
-sdist drops the SPA; building a wheel from the sdist trips the hook.
-This is intentional — same as pgdp-prep.
-
----
+The sdist includes the prepared SPA through global build artifacts. A subsequent wheel build from the
+sdist therefore retains the bundle. Tests in `tests/test_packaging.py` cover wheel/sdist contents and
+the explicit source sdist-then-wheel sequence.
 
 ## 6. Container
 
-`Dockerfile` (multi-stage):
+`Dockerfile` is the authoritative multi-stage build: pinned Node with frozen pnpm frontend installation,
+Python 3.13, uv-exported hashed runtime requirements, and a nonroot runtime user. The runtime serves the
+bundled SPA without a Node development server. `just docker-build` builds the dev image;
+`just docker-run` publishes its port but does not add a data bind mount. Add an explicitly selected volume
+when running it for persistent work; the recipe itself does not promise one.
 
-```dockerfile
-# 1) Build SPA
-FROM node:24 AS spa
-WORKDIR /work
-COPY frontend/package.json frontend/package-lock.json /work/
-RUN npm ci
-COPY frontend/ /work/
-RUN npm run build
-
-# 2) Build wheel
-FROM python:3.13-slim AS wheel
-WORKDIR /work
-COPY pyproject.toml uv.lock README.md /work/
-COPY src/ /work/src/
-COPY --from=spa /work/dist/ /work/src/pdomain_ocr_labeler_spa/static/
-RUN pip install uv && uv build --wheel -o /dist/
-
-# 3) Runtime
-FROM python:3.13-slim
-COPY --from=wheel /dist/*.whl /tmp/
-RUN pip install /tmp/*.whl && rm /tmp/*.whl
-EXPOSE 8080
-ENTRYPOINT ["pdomain-ocr-labeler-ui", "--host", "0.0.0.0", "--no-browser"]
-```
-
-For local Docker dev:
-```sh
-just docker-build        # docker build -t pdomain-ocr-labeler-spa .
-just docker-run          # docker run -p 8080:8080 -v ~/data:/data pdomain-ocr-labeler-spa
-```
-
----
+`tests/integration/test_docker_build.py` covers image build, SPA serving, health and runtime contents.
+The ordinary backend test selection currently includes those unmarked Docker tests.
 
 ## 7. CI
 
-Push and pull request CI runs in `.github/workflows/ci.yml`. Releases run in
-`.github/workflows/release.yml`, but only by workflow dispatch from the local
-`just release-patch`, `just release-minor`, or `just release-major` targets:
+`just ci` is the local gate. It runs locked setup, a single frozen frontend install, pre-commit, Python and
+frontend checks/tests, behavior coverage, OpenAPI/frontend build, explicit sdist then wheel, and strict docgraph.
+It does not run the optional Playwright e2e suite. `ci-slow` currently delegates to that same gate.
 
-| Job | Trigger | Required for green PR? |
-|---|---|---|
-| `lint` | every push + PR | Yes |
-| `test-backend` | every push + PR | Yes |
-| `test-frontend` | every push + PR | Yes |
-| `test-e2e` | every push + PR | Yes |
-| `openapi-drift` | every push + PR | Yes |
-| `build-wheel` | every push + PR | Yes (asserts static/index.html in wheel) |
-| `release-ci` | workflow dispatch | No (reruns `just ci-slow` from the exact tag) |
-| `publish` | workflow dispatch after `release-ci` | No (uploads one `dist/*.whl` asset to the GitHub Release and dispatches `pdomain-index-pip`) |
-
-`UV_PYTHON: "3.13"` is pinned because uv-discovered 3.14 has a known
-anyio/SQLite teardown segfault (same fix as pgdp-prep `release.yml:33`).
-
----
+Release recipes call `scripts/do-release.sh` and `release-common.sh`. The script checks clean branch/remote
+state, computes the tag, runs `just ci-slow`, creates an annotated tag, pushes master and that exact tag,
+then builds locally and creates the GitHub Release with wheel/sdist assets. It does not dispatch a workflow,
+publish the package index or restart services. Index publication is a separate owning-repository operation.
+See the [release runbook](../runbooks/release.md).
 
 ## 8. Pre-commit hooks
 
-`.pre-commit-config.yaml`:
-
-```yaml
-repos:
-  - repo: meta
-    hooks:
-      - id: check-hooks-apply
-      - id: check-useless-excludes
-  - repo: https://github.com/pre-commit/pre-commit-hooks
-    rev: v4.6.0
-    hooks:
-      - id: trailing-whitespace
-      - id: end-of-file-fixer
-      - id: check-yaml
-      - id: check-json
-  - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.13.0
-    hooks:
-      - id: ruff-check
-        args: ["--select", "I", "--fix"]
-      - id: ruff-check
-        args: ["--fix"]
-      - id: ruff-format
-  - repo: https://github.com/pre-commit/mirrors-eslint
-    rev: v9.x
-    hooks:
-      - id: eslint
-        files: ^frontend/src/.*\.(ts|tsx)$
-        args: ["--fix"]
-  - repo: local
-    hooks:
-      - id: openapi-drift
-        name: OpenAPI types in sync
-        language: system
-        entry: bash -c 'just openapi-export && git diff --exit-code frontend/src/api/types.ts'
-        pass_filenames: false
-        stages: [pre-push]
-```
-
-`openapi-drift` runs only on `pre-push` so the inner-loop dev cycle
-isn't slowed by openapi regen.
-
----
+`.pre-commit-config.yaml` owns the hook list. External revisions are frozen 40-character commit SHAs,
+not movable tag examples. Setup reinstalls hooks in the canonical checkout; worktrees leave canonical
+hook ownership alone. The shared version-refresh script calls `just refresh-version` after relevant Git
+operations, with nonfatal failure. There is no configured pre-push OpenAPI drift hook.
+The external-hook appendix below preserves the freeze policy and dated verification evidence.
 
 ## 9. Versioning
 
@@ -457,7 +306,8 @@ boot. Plain text format with `[rid=...]` request-id tags.
 `--verbose -vv` enables `pdomain_book_tools` DEBUG; `-vvv` enables
 `urllib3`, `engineio`, `socketio` DEBUG.
 
-`--log-format json` switches to NDJSON for log aggregators.
+Logging format comes from Settings.log_format (default plain). The CLI has no `--log-format` flag.
+Configure the Settings field rather than invoking the removed example.
 
 There is no log-cleanup recipe in the justfile.
 

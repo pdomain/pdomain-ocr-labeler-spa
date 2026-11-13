@@ -3,7 +3,7 @@ kind: process
 status: active
 owner: maintainers
 created: 2026-05-19
-last_verified: 2026-11-12
+last_verified: 2026-11-13
 ---
 
 # docs/
@@ -62,7 +62,9 @@ This layout is workspace-standard; see
 - [`context/completed-github-issues-ledger.md`](context/completed-github-issues-ledger.md)
   — completed issue provenance, coverage, and deletion status
 - [`context/retirement-manifest.md`](context/retirement-manifest.md) — per-document outcomes and replacements
-- [`context/open-findings.md`](context/open-findings.md) — six findings, all closed on 2026-09-18
+-
+  [`decisions/2026-11-13-retire-completed-doc-inventories.md`](decisions/2026-11-13-retire-completed-doc-inventories.md)
+  — six findings, all closed on 2026-09-18
 
 ### issues/
 
@@ -88,5 +90,5 @@ Shipped behavior is under `architecture/`. These files keep unfinished design an
 
 ### research/
 
-- [CharRange deletion inventory](research/2026-08-22-char-range-deletion-inventory.md) — the clean break found nothing
+- [CharRange deletion inventory](decisions/2026-11-13-retire-completed-doc-inventories.md) — the clean break found nothing
   to migrate, and the legacy route is gone.

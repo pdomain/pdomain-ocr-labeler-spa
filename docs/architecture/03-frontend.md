@@ -3,7 +3,7 @@ kind: architecture
 status: built
 owner: maintainers
 created: 2026-05-06
-last_verified: 2026-07-14
+last_verified: 2026-11-13
 ---
 
 # 03 — Frontend (React/Vite/TS)
@@ -32,10 +32,10 @@ character-range hooks are unsupported.
 ```
 frontend/
 ├── package.json
-├── package-lock.json
+├── pnpm-lock.yaml
 ├── index.html             # loads /env.js then /src/main.tsx
 ├── vite.config.ts         # @vitejs/plugin-react; proxy /api + /image-cache
-├── vitest.config.ts       # separate file (vitest 2 vs vite 6 type clash)
+├── vitest.config.ts       # separate file (test and build configuration are separate)
 ├── tsconfig.json
 ├── tsconfig.app.json      # strict, ES2022, jsx=react-jsx
 ├── tsconfig.node.json
@@ -99,10 +99,10 @@ frontend/
 │   │   ├── server.ts
 │   │   └── handlers.ts
 │   └── styles/
-│       └── fonts.css        # @font-face for DPSansMono
+│       └── fonts.css        # @font-face for JetBrains Mono
 └── public/
     └── fonts/
-        └── DPSansMono.ttf   # bundled — verbatim copy from legacy
+        └── JetBrains Mono.ttf   # bundled — verbatim copy from legacy
 ```
 
 ---
@@ -111,14 +111,14 @@ frontend/
 
 | Layer | Choice | Notes |
 |---|---|---|
-| Build | Vite 6 | `@vitejs/plugin-react`, `vite-tsconfig-paths` (closes pgdp-prep gap). |
-| Lang | TypeScript 5.x | `strict: true`, `noUnusedLocals`, `noUnusedParameters`, `verbatimModuleSyntax`. |
+| Build | Vite | React plugin and explicit resolve aliases in `vite.config.ts`; versions live in `package.json`. |
+| Lang | TypeScript | `strict: true`, `noUnusedLocals`, `noUnusedParameters`, `verbatimModuleSyntax`. |
 | Framework | React 19 | StrictMode in dev. |
 | Routing | `react-router-dom` v7 | BrowserRouter. |
-| Server state | `@tanstack/react-query` v5 | One `QueryClient` in `main.tsx` with `refetchOnWindowFocus: false`, `staleTime: 30_000`. |
+| Server state | `@tanstack/react-query` v5 | One `QueryClient` in `App.tsx` with `refetchOnWindowFocus: false`, `staleTime: 30_000`. |
 | Local state | `useState`/`useReducer` | Per-component. |
-| Cross-page UI prefs | `zustand` | `stores/ui-prefs.ts` (filter, layer visibility, splitter, selection_mode), `stores/selection.ts` (mirror of backend selection w/ optimistic updates). |
-| Styling | Tailwind 3.4 | `tailwind.config.ts` content globs. |
+| Cross-page UI prefs | `zustand` | `stores/ui-prefs.ts` (filter, layer visibility, splitter, selection_mode), `stores/selection-store.ts` (client-owned selection). |
+| Styling | Tailwind | `tailwind.config.ts` content globs. |
 | Components | shadcn/ui | Generated under `components/ui/` via `npx shadcn add ...`. Radix primitives under the hood. |
 | Forms | controlled inputs + `useMutation` | No form library. |
 | Toasts | `sonner` | One `<Toaster />` in `App.tsx`. |
@@ -131,7 +131,7 @@ frontend/
 | E2E | Playwright (Chromium) | Pytest harness, see [`14-testing.md`](14-testing.md). |
 
 Vite path aliases (closes pgdp-prep gap): `@/*` → `src/*`. Configured
-in both `vite.config.ts` (via `vite-tsconfig-paths`) and
+in both `vite.config.ts` (explicit resolve aliases) and
 `tsconfig.app.json`.
 
 ### Shared primitive ownership
@@ -172,154 +172,23 @@ Evidence:
 
 ## 3. Routes
 
-Source of truth: `src/routes.ts`. Every other module imports from
-here so the route table is testable.
-
-**D-030** moved the SPA to pgdp-prep's plural convention with explicit
-sub-routes.
-
-```ts
-export const routes = {
-  root:             '/',
-  project:          '/projects/:projectId',
-  pageByNumber:     '/projects/:projectId/pages/pageno/:pageNumber',  // 1-based, canonical
-  pageByIndex:      '/projects/:projectId/pages/index/:pageIndex',    // 0-based
-  pageBare:         '/projects/:projectId/pages/:pageNumber',         // → 301 → pageno
-  // legacy compat:
-  legacyProject:    '/project/:projectId',                            // → 301
-  legacyPage:       '/project/:projectId/page/:pageNumber',           // → 301
-} as const;
-
-export const buildProjectUrl = (id: string) =>
-  `/projects/${encodeURIComponent(id)}`;
-export const buildPageNumberUrl = (id: string, oneBased: number) =>
-  `/projects/${encodeURIComponent(id)}/pages/pageno/${oneBased}`;
-export const buildPageIndexUrl = (id: string, zeroBased: number) =>
-  `/projects/${encodeURIComponent(id)}/pages/index/${zeroBased}`;
-```
-
-`App.tsx`:
-
-```tsx
-<Routes>
-  <Route path={routes.root} element={<RootPage />} />
-  <Route path={routes.project} element={<ProjectPage />} />
-  <Route path={routes.pageByNumber} element={<ProjectPage />} />
-  <Route path={routes.pageByIndex} element={<ProjectPage />} />
-  <Route path={routes.pageBare} element={<RedirectToPageNumber />} />
-  <Route path={routes.legacyProject} element={<LegacyRedirect />} />
-  <Route path={routes.legacyPage} element={<LegacyRedirect />} />
-</Routes>
-```
-
-`RootPage` and `ProjectPage` are the **only** two real top-level
-pages. The two `*Redirect` components are tiny shims that emit
-`<Navigate to=... replace />` to the canonical form.
-
-URL invariants — see [`13-driver-contract.md`](13-driver-contract.md) §1
-for the full rule set.
-
-- `/` — placeholder when no project; otherwise redirects to the
-  last-loaded project's last page via `pageno`.
-- `/projects/{id}` — same as `/projects/{id}/pages/pageno/1`.
-- `/projects/{id}/pages/pageno/{n}` — canonical 1-based.
-- `/projects/{id}/pages/index/{idx0}` — alternate 0-based.
-- `/projects/{id}/pages/{n}` — bare; 301 → `pageno`.
-- Legacy `/project/...` paths — 301 redirected.
-
-If `projectId` doesn't match a discovered project, render an inline
-"Project not found" panel; **don't 404 the route** — the driver expects
-the chrome to remain present.
-
----
+`frontend/src/lib/routes.ts` is the route catalogue. `App.tsx` mounts the root project list, project page
+workbench and typography worklist. Canonical project/page routes are plural and include explicit page-number
+and index forms. Legacy singular URLs receive backend 301 redirects; removed editing surfaces do not return.
+See the [driver contract](13-driver-contract.md) for mounted controls and selectors.
 
 ## 4. Bootstrap
 
-`src/main.tsx`:
-
-```tsx
-import { StrictMode } from "react";
-import { createRoot } from "react-dom/client";
-import { BrowserRouter } from "react-router-dom";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { Toaster } from "sonner";
-import App from "@/App";
-import "@/index.css";
-
-const qc = new QueryClient({
-  defaultOptions: { queries: { refetchOnWindowFocus: false, staleTime: 30_000 } },
-});
-
-createRoot(document.getElementById("root")!).render(
-  <StrictMode>
-    <BrowserRouter>
-      <QueryClientProvider client={qc}>
-        <App />
-        <Toaster richColors />
-      </QueryClientProvider>
-    </BrowserRouter>
-  </StrictMode>
-);
-```
-
-`index.html`:
-
-```html
-<!doctype html>
-<html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <title>pd-ocr-labeler</title>
-    <link rel="icon" href="/favicon.ico" />
-  </head>
-  <body>
-    <div id="root"></div>
-    <script src="/env.js"></script>
-    <script type="module" src="/src/main.tsx"></script>
-  </body>
-</html>
-```
-
-`/env.js` is served by FastAPI (`api/env_js.py`) and shapes
-`window.__ENV__ = {API_BASE: "", API_TOKEN: null}`. The SPA reads it
-once via `client.ts`.
-
----
+`main.tsx` imports the Inter and JetBrains Mono fonts and renders `App`. `App.tsx` owns BrowserRouter,
+QueryClientProvider, the shared AppShell, compute settings, suite navigation and long-lived notifications.
+Server data belongs to TanStack Query; local selection, viewport modes and preferences have separate stores.
 
 ## 5. App shell (`App.tsx`)
 
-```tsx
-export default function App() {
-  return (
-    <div className="flex min-h-screen flex-col">
-      <HeaderBar />
-      <main className="flex-1">
-        <Routes>...</Routes>
-      </main>
-      <NotificationStream />     {/* hidden, drives sonner */}
-      <ProjectLoadingOverlay />   {/* portal, gated on app_state.loading */}
-      <BusyOverlay />             {/* portal, gated on busy */}
-    </div>
-  );
-}
-```
-
-`HeaderBar` is chrome-only (D-047, 2026-06-14): logo, app name, project
-breadcrumb, and the resolved project-root path label. The AppShell injects the
-LauncherSlot + SettingsSlot ⚙ (which owns theme via the Appearance panel,
-D-048) into the header zone. Document/page-scoped controls live in the body:
-page navigation, page actions, and the metrics strip moved into the
-`WorkspaceToolbar` band (a pdomain-ui `StageToolbar`,
-`data-testid="workspace-toolbar"`) at the top of the project route; the ⌘K
-`QuickSearch` moved into the Drawer worklist header
-(`data-testid="drawer-worklist-header"`). No tabs, no nav chrome at the app
-level — the legacy is a single page and we preserve that look.
-
-> Note: the snippet above predates the pdomain-ui AppShell adoption (Phase 2.4).
-> In the shipped app `App.tsx` mounts the pdomain-ui `AppShell` with
-> `header` / `rail` / `main` slots rather than a hand-rolled flex column.
-
----
+The shared `pdomain-ui` AppShell owns the header, rail, drawers, dock and layout primitives. Labeler adapters
+supply job/status controls, the suite launcher and application panels. ProjectPage owns domain selection,
+canvas overlays, mutations and its local right-panel frame. See [shell layout](24-shell-layout.md) and
+[repository boundaries](30-repository-boundaries.md). This is the mounted shell, not a second layout proposal.
 
 ## 6. State stores
 
@@ -347,7 +216,7 @@ Persisted to `localStorage` via the `zustand/middleware/persist` adapter.
 Per-browser today (D-021). When auth lands (D-005 follow-up), migrate
 to a per-user backend store via `GET/PUT /api/user/prefs`.
 
-### `stores/selection.ts`
+### `stores/selection-store.ts`
 
 Mirror of backend `Selection`. Applies optimistic updates — `useMutation`
 calls invalidate the store + re-query.
@@ -458,10 +327,9 @@ Auto-generated from `frontend/openapi.json` via `openapi-typescript`.
 Imports look like:
 
 ```ts
-import type { PagePayload, WordMatch, LineMatch } from "@/api/types";
-import { api } from "@/api/client";
+import type { components } from "@/api/types";
 
-const page = await api.get<PagePayload>(`/api/projects/${id}/pages/${idx}`);
+type PagePayload = components["schemas"]["PagePayload"];
 ```
 
 ---
@@ -470,16 +338,10 @@ const page = await api.get<PagePayload>(`/api/projects/${id}/pages/${idx}`);
 
 ### `usePage(projectId, pageIndex, lineFilter)`
 
-```ts
-useQuery({
-  queryKey: ["page", projectId, pageIndex, lineFilter],
-  queryFn: () =>
-    api.get<PagePayload>(
-      `/api/projects/${projectId}/pages/${pageIndex}`,
-      { query: { line_filter: lineFilter } }
-    ),
-});
-```
+`usePage.ts` builds query parameters with URLSearchParams and fetches with AbortSignal. Reload epochs and
+payload ordering guards prevent an old project/page response from replacing newer state. The hook defaults
+to all lines; the mounted workbench filters the returned line matches locally. The handwritten client has
+no `query` option and no module-level `api` singleton.
 
 ### `useProjects()`
 

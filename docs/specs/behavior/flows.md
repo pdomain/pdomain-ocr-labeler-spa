@@ -3,7 +3,7 @@ kind: behavior-flow-spec
 status: active
 owner: maintainers
 created: 2026-06-01
-last_verified: 2026-11-12
+last_verified: 2026-11-13
 ---
 
 # Cross-unit flows - pdomain-ocr-labeler-spa
@@ -285,6 +285,14 @@ last_verified: 2026-11-12
   persisted it; step 3's reload/persistence claim is proven separately at
   the integration level by `tests/integration/test_glyph_routes.py` (see
   B-GLYPH-005).
+
+## Implementation reconciliation (2026-11-13)
+
+Rotation, edited-image OCR and the visible toolbar have real effect coverage. F-IMAGE-DRIFT-01's automatic
+save-triggered reload is not implemented: current GET drift detection renders a banner pointing to Reload
+OCR. Preserve the stronger acceptance as open. Independent save/export tests do not prove one combined
+browser open/edit/save/export flow. QuickSearch focuses input; rail Hotkeys opens help. No glyph predictor
+will be built, and mocked rejection handlers do not establish real prediction acceptance.
 
 ## Adversarial Review
 

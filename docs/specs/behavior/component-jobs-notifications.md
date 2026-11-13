@@ -3,7 +3,7 @@ kind: spec
 status: active
 owner: maintainers
 created: 2026-06-01
-last_verified: 2026-07-13
+last_verified: 2026-11-13
 ---
 
 # Behavior unit spec - Jobs and notifications
@@ -69,6 +69,13 @@ last_verified: 2026-07-13
 - **Tier(s):** A
 - **Regression:** no
 - **Test:** -
+
+## Implementation reconciliation (2026-11-13)
+
+useJobProgress reads public Job-plus-event lifecycle data. Action callers invalidate affected queries;
+useCancelJob posts canonical cancellation. The active jobs panel is not global persistent jobs history.
+Evidence: `useJobProgress.test.tsx`, `BusyOverlay.test.tsx`,
+`tests/integration/test_jobs_wire_contract.py::test_sse_frames_for_running_and_complete_validate_against_the_declared_model`.
 
 ## Adversarial Review
 

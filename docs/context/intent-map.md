@@ -51,7 +51,15 @@ Worth doing, and not scheduled.
 - Glyph per-mark provenance, cross-page bulk marking, and a profile registry. No predictor will be built in this app.
   Bulk recipes still write legacy `ct` and `st`.
 - Page-kind keyboard path, still separate from the shipped region keyboard loop.
-- Driver and adapter documentation so the catalogue matches mounted components and explains the permanent local adapters.
+- Finish unreachable-successor discovery and expired-prune reload/undo acceptance for U-M6. Existing boundary
+  undo/redo is shipped; conservative pruning does not discover severed successor aggregates.
+- Reconcile the managed-library picker/copy-import and visible cancelable prefetch requirements in the partial
+  behavior-completion design with the shipped source-root picker and silent adjacent-page prefetch.
+- Reconcile stored rotation method/on-load settings with the explicit auto-rotate-all implementation; the
+  current engine does not consume those settings as promised by the earlier design.
+- Preserve UI contract gaps: browser-local drawer persistence/invalid-tab fallback, save-time image-drift
+  refusal and automatic recovery, true polygon erase, and the specified full boundary-restore browser flow.
+  The current implementation notes in the living behavior specs distinguish these from shipped pieces.
 
 ## Separate repositories
 
@@ -96,7 +104,8 @@ Auth, S3, Postgres, and managed adapters stay deferred under D-042 until there i
   edits. Word split refuses rather than orphan a word's sidecars.
 - **Closed all six open findings**, including BUG-KBD-1/4/5, the XDG data root, empty OCR, zero-area placeholders, and
   hierarchy waits. Commit `6db2e42` registered `mod+,`, `mod+j`, and `mod+shift+r`. BUG-KBD-4 was already done. The
-  ledger is [`open-findings.md`](open-findings.md). The 18 deep-review reports under `docs/issues/2026-07-21-*`, the
+  ledger is [`open-findings.md`](../decisions/2026-11-13-retire-completed-doc-inventories.md). The 18 deep-review
+  reports under `docs/issues/2026-07-21-*`, the
   two migrated GitHub records, and the same-day September reports are deleted. Tombstones are in [`decisions.md`](decisions.md).
 - **Closed #404, #430, #433, #437, and #460.** The CI-equivalence and OpenAPI-drift issues became moot when the named
   GitHub workflows were deleted.
@@ -125,8 +134,9 @@ Auth, S3, Postgres, and managed adapters stay deferred under D-042 until there i
   waits for `word-detail`. The real-project exercise opens that panel from a worklist row. Neither test opens the
   retired modal.
 - **Shipped U-M6 history boundaries.** Undo and redo follow page-slot lineage across a re-OCR or rotation boundary.
-  A jump stays inside the active chain. `POST /api/projects/{project_id}/maintenance/prune` deletes only blobs the
-  undo spec marks dead. U-M7 listing and jumps are unchanged. Coverage is
+  A jump stays inside the active chain. The maintenance endpoint prunes known snapshot candidates from
+  reachable lineage; unreachable-successor discovery and full expired-prune acceptance remain under Later.
+  U-M7 listing and jumps are unchanged. Coverage is
   `tests/integration/test_history_undo_redo.py` and `tests/unit/core/test_page_prune.py`.
 - **Kept word ids across one region membership write.** The write stamps each word's reading order before it moves
   words, so typography journal rows stay on the same ids. Line merge, split, and delete still renumber `page.lines`.

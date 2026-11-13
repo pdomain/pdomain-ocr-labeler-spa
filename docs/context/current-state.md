@@ -219,3 +219,22 @@ though several of its entries (the word edit dialog, root filter chips) were
 settled by 2026-09-18 decisions recorded here and in `decisions.md` before
 that file itself was updated to say so; check `decisions.md` first for
 anything it flags as still open.
+
+## Architecture migration and release preparation (2026-11-13)
+
+Current architecture now separates local event/blob page persistence from retired envelope lanes, the shared
+canvas host from old scaffold layouts, and local release scripts from removed workflows. Fresh analyzers
+checked all 78 indexed documents against source, tests and history. Completed inventory/assembly records
+are retired through the [decision receipt](../decisions/2026-11-13-retire-completed-doc-inventories.md).
+
+Boundary undo/redo and conservative snapshot pruning ship, but unreachable-successor discovery and complete
+expired-prune reload/undo acceptance remain unfinished. The partial undo design and roadmap retain them.
+Typography suggestion acceptance and predecessor compensation still need the existing owner decisions.
+The library-picker/manual-prefetch, rotation-setting and UI recovery discrepancies remain explicit intent.
+
+The local warning cleanup, Just migration, pin refresh and docs corrections are committed but not published
+as a new release. Planning targets minor `v0.7.0` from published `v0.6.0`, through `just release-minor`;
+publication waits for the coordinator's inbox release.
+
+Locked book-tools remains 0.31.0, measure 0.1.0 and numpy 2.4.6. No upstream pin adoption, index publication,
+service restart or deployment is implied by this documentation pass.

@@ -3,7 +3,7 @@ kind: runbook
 status: active
 owner: maintainers
 created: 2026-06-01
-last_verified: 2026-07-13
+last_verified: 2026-11-13
 ---
 
 # Troubleshooting
@@ -46,12 +46,11 @@ Fix is the same: `just frontend-build`.
 
 ## OpenAPI types drift
 
-**Symptom:** CI `openapi-drift` job fails with a diff in
-`frontend/src/api/types.ts` or `frontend/openapi.json`.
+**Symptom:** Generated frontend types differ after an API model change, or frontend typechecks expose a mismatch.
 
 **Cause:** A FastAPI request or response model changed and `just
-openapi-export` was not re-run before commit. CI re-runs the export and
-compares via `git diff --exit-code`.
+openapi-export` was not re-run before commit. Local CI regenerates and typechecks; it does not contain
+the former workflow/pre-push git-diff gate. Inspect the tracked types diff explicitly.
 
 **Fix:**
 
@@ -95,7 +94,7 @@ starting from `8080` using `pdomain_ops.suite.bootstrap_spa`.
 `pdomain-book-tools` (registry instead of your local editable, or vice versa).
 
 **Cause:** Local-dev mode is tracked by the marker file
-`.venv/.pdomain-dev-local`. A plain `uv sync` after a worktree merge can
+`${UV_PROJECT_ENVIRONMENT:-.venv}/.pdomain-local-mode`. A plain `uv sync` after a worktree merge can
 revert the editable install without removing the marker, leaving an
 inconsistent state.
 
@@ -114,15 +113,17 @@ just local-setup-py   # idempotent; re-applies editable Python siblings
 **Fix (revert to registry):**
 
 ```sh
-uv sync --group dev   # drops the editable install
-rm -f .venv/.pdomain-dev-local
+uv sync --locked --group dev && just frontend-install && \
+  rm -f "${UV_PROJECT_ENVIRONMENT:-.venv}/.pdomain-local-mode" \
+        "${UV_PROJECT_ENVIRONMENT:-.venv}/.pdomain-dev-local"
 ```
 
 **Symptom:** `ModuleNotFoundError: No module named 'pdomain_ocr_labeler_spa'`
 after merging a worktree branch.
 
-**Cause:** Worktrees share the canonical `.venv`. When a worktree is removed,
-the editable install path it was registered at no longer exists.
+**Cause:** An explicitly shared project environment can retain an editable path to a removed worktree.
+Ordinary worktrees can have independent environments; local-dev scripts resolve their mode marker against
+the canonical checkout. Inspect UV_PROJECT_ENVIRONMENT and `just local-check` before changing resolution.
 
 **Fix:**
 
@@ -149,11 +150,8 @@ restricted path.
 store-dir=~/.local/share/pnpm/store
 ```
 
-If a stale lockfile is preventing correct resolution:
-
-```sh
-cd frontend && rm -rf node_modules pnpm-lock.yaml && pnpm install
-```
+Preserve the lockfile while diagnosing resolution. Run `just frontend-install` for registry mode or
+`just local-frontend-install` for the local-link overlay. Dependency upgrades are a separate deliberate action.
 
 (`feedback_pnpm_store_location.md` in agent memory, source-pattern verified
 against `frontend/.npmrc`)
@@ -201,7 +199,7 @@ regenerating API types.
 gaps in components that use the changed schemas.
 
 **Fix:** Address the new type errors before committing. Do not suppress them
-with `// @ts-ignore` unless they are pre-existing; check
+with a new `// @ts-ignore`. Existing exceptions need their recorded narrow rationale; check
 `docs/process/lint-deviations.md` for the project's suppression policy.
 
 ---

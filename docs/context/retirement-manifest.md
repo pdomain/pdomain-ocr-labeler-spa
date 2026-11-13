@@ -3,17 +3,22 @@ kind: context
 status: active
 owner: maintainers
 created: 2026-07-13
-last_verified: 2026-07-13
+last_verified: 2026-11-13
 ---
 
 # Retirement manifest
+
+This is the historical per-document receipt for the July 2026 migration. Its table records destinations
+known at that time, including documents retired later. Current operation follows the architecture index
+and [new retirement receipt](../decisions/2026-11-13-retire-completed-doc-inventories.md); the original
+classifications and recovery pointers below remain unchanged.
 
 ## Agent Index
 
 - **Kind:** context
 - **Status:** active
 - **Owner:** maintainers
-- **Last verified:** 2026-07-13
+- **Last verified:** 2026-11-13
 - **Read when:** tracing a document removed by the initial docgraph migration.
 - **Search terms:** retirement manifest, deleted docs, replacements, tombstones.
 

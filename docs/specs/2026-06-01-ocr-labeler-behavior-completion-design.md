@@ -3,7 +3,7 @@ kind: spec
 status: partial
 owner: maintainers
 created: 2026-06-01
-last_verified: 2026-07-13
+last_verified: 2026-11-13
 ---
 
 # OCR Labeler Behavior Completion Design
@@ -23,6 +23,16 @@ deferred. For this phase, the app's own E2E suite is the behavior driver.
 
 This design covers project selection/import, action discovery, canvas editing,
 word editing, jobs, persistence visibility, and deferred behavior tracking.
+
+## Current scope update (2026-11-13)
+
+The source-root project picker, permanent confirmed deletion, silent adjacent-page prefetch, persistent
+page erase, edited-image OCR, visible toolbar, mounted right-panel editing and manual glyph review are
+implemented. The original phase exclusions below are historical scope, not claims those features are absent.
+The shared managed-library picker/copy-import and visible cancelable manual-prefetch workflow remain
+unimplemented requirements. Erase currently resets to select after one drag; the older stays-active target
+remains a design discrepancy rather than a newly approved change. Current implementation is described in
+architecture 03/21/24/29/31; the roadmap retains residual intent. No glyph predictor will be built here.
 
 ## Non-Goals
 

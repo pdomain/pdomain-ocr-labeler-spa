@@ -3,7 +3,7 @@ kind: context
 status: active
 owner: maintainers
 created: 2026-07-19
-last_verified: 2026-07-19
+last_verified: 2026-11-13
 ---
 
 # Completed GitHub issues migration ledger
@@ -13,9 +13,17 @@ last_verified: 2026-07-19
 - **Kind:** context
 - **Status:** active
 - **Owner:** maintainers
-- **Last verified:** 2026-07-19
+- **Last verified:** 2026-11-13
 - **Read when:** reconciling completed GitHub issues with durable repository documentation.
 - **Search terms:** GitHub issue migration, completed issues, raw digest, deletion status, architecture coverage.
+
+## Current scope (2026-11-13)
+
+This ledger remains for the separate remote issue-deletion campaign. Its digests and original table are
+historical evidence, not a fresh certification that the remote default branch satisfies every deletion
+prerequisite. No remote issue is deleted by this docs migration. #456 still needs the existing RUF002
+owner policy decision. #454's former word-edit-modal blocker is superseded by the mounted right-panel
+contract and `tests/e2e/test_project_page_smoke.py`; this does not make every row deletion-ready.
 
 ## Coverage ledger
 

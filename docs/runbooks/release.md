@@ -3,12 +3,15 @@ kind: runbook
 status: active
 owner: maintainers
 created: 2026-06-01
-last_verified: 2026-07-13
+last_verified: 2026-11-13
 ---
 
 # Release Runbook
 
 How to build and publish a new `pdomain-ocr-labeler-spa` wheel.
+
+Dated Makefile/source line citations below preserve earlier verification snapshots. Current executable
+truth is `justfile`, `pyproject.toml` and `scripts/release-common.sh`; old line numbers are not new verification.
 
 For local development setup see [`docs/runbooks/local-dev.md`](local-dev.md).
 For the wheel's deployment contract see [`docs/architecture/15-deployment-dev.md`](../architecture/15-deployment-dev.md).
@@ -17,8 +20,10 @@ For the wheel's deployment contract see [`docs/architecture/15-deployment-dev.md
 
 ## Prerequisites
 
-- Clean working tree on `master`, in sync with `origin/master`.
-- `AI=1 just ci` green (the release script runs this as a pre-flight).
+- Clean working tree on `master`; fetch and review the exact local-only commit range.
+  The script rejects behind/diverged branches and permits an ahead branch whose commits will be pushed.
+  Publication must also have the coordinator's stage release for this migration rollout.
+- `AI=1 just ci` green for agent verification. The script defaults to `just ci-slow` as its preflight.
 - `gh` CLI authenticated with write access to the repository.
 
 ---
@@ -33,11 +38,11 @@ pieces enforce this:
 `frontend/dist/` to `src/pdomain_ocr_labeler_spa/static/`.
 (`Makefile:238-245`, verified 2026-06-01)
 
-**`force-include` in `pyproject.toml`**
+**Global artifacts in `pyproject.toml`**
 
 ```toml
-[tool.hatch.build.targets.wheel.force-include]
-"src/pdomain_ocr_labeler_spa/static" = "pdomain_ocr_labeler_spa/static"
+[tool.hatch.build]
+artifacts = ["src/pdomain_ocr_labeler_spa/static/**/*"]
 ```
 
 (`pyproject.toml:89-90`, verified 2026-06-01)
@@ -103,7 +108,8 @@ The script (`scripts/release-common.sh`, verified 2026-06-01):
 3. Runs `just ci-slow` (the `RELEASE_PREFLIGHT`).
 4. Creates an annotated tag `vN.N.N`.
 5. Pushes `master` and the exact tag to `origin`.
-6. Triggers `.github/workflows/release.yml` via `gh workflow run release.yml --ref master -f tag=vN.N.N`.
+6. Runs `just build` locally and creates the GitHub Release with wheel/sdist assets.
+   Index publication is separate; no workflow or index-repository dispatch occurs.
 
 ### Escape hatches
 
@@ -181,7 +187,7 @@ installed. Confirm the intended version source before tagging.
 ## Steps
 
 Run the build and release checks above in order. Publish only through the GitHub
-Release workflow and the `pdomain-index-pip` target described above.
+Release mechanism and the separate `pdomain-index-pip` publication described above.
 
 ## Verification
 

@@ -2,7 +2,7 @@
 Status: active
 Owner: CT
 Created: 2026-09-02
-Last verified: 2026-09-02
+Last verified: 2026-11-13
 Kind: architecture
 ---
 
@@ -13,7 +13,7 @@ Kind: architecture
 - **Kind:** architecture
 - **Status:** active
 - **Owner:** CT
-- **Last verified:** 2026-09-02
+- **Last verified:** 2026-11-13
 - **Read when:** changing model discovery, the Hugging Face probe, or the trainer weights root.
 - **Search terms:** model selection, hf probe, last modified, model store dirname, pd-ml-models.
 
@@ -64,3 +64,9 @@ Profiles named `all` or `base-ocr` were both treated as the preferred profile, w
 pair of names `pd-ocr-trainer` used for its base profile before and after its own migration.
 
 A trailing ten-digit run of characters in a name was recognised as a timestamp suffix.
+
+## Current SPA divergence (2026-11-13)
+
+The captured legacy default/Built-in DocTR names above are historical keys. Current SPA stock selection
+uses `stock` with the label Stock (bundled DocTR). See model-selection source and its tests. This note
+preserves the old capture provenance while distinguishing the current wire choice.

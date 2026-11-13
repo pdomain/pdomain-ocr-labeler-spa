@@ -3,7 +3,7 @@ kind: architecture
 status: built
 owner: maintainers
 created: 2026-05-16
-last_verified: 2026-07-13
+last_verified: 2026-11-13
 ---
 
 # 28 — Palettes and Pickers
@@ -161,35 +161,9 @@ Each `CharEntry` has `{ char: string, cp: string }` where `cp` is `"U+XXXX"`.
 
 ### useLayerColors
 
-```typescript
-interface LayerColors {
-  block: string;  // CSS hex string, e.g. "#a89074"
-  para: string;
-  line: string;
-  word: string;
-}
-
-// Fallbacks used in jsdom / when CSS tokens are unavailable:
-const FALLBACKS = { block: "#a89074", para: "#7fb56a", line: "#d088a8", word: "#6e9cdf" };
-```
-
-Reads `--layer-block`, `--layer-para`, `--layer-line`, `--layer-word` from
-`getComputedStyle(document.documentElement)`. Falls back silently.
-
-Additional exports from the same module:
-
-- `readLayerColors()` — imperative (non-hook) version.
-- `hexToRgba(hex, alpha)` — converts a 6-digit hex to `rgba(r,g,b,a)` string.
-- `LAYER_FILL_ALPHA = 0.2`, `LAYER_STROKE_ALPHA = 0.65`
-- `hexToLayerColorSpec(hexColor)` — returns `{ fill, stroke, strokeWidth }` for
-  Konva overlays.
-- `readCssToken(prop, fallback)` — generic CSS token reader.
-- `readAccentColor()` — reads `--accent`, falls back to `"#d6925a"`.
-- `buildSelectionLayerSpec()` — uses `--accent`; `fill` at 18% opacity.
-- `buildDragRectLayerSpec()` — uses `--accent`; transparent fill, 2px stroke.
-
-`LayerColorSpec` is also re-exported by `BBoxOverlay.tsx` for backwards
-compatibility (the type was originally defined there).
+The hook reads CSS aliases and observes document.documentElement's data-theme attribute.
+Its current exported API is defined in the source; helper export examples below are not needed
+to consume the hook. Theme changes trigger a token reread.
 
 ## 5. Interactions and behaviors
 
@@ -238,10 +212,7 @@ compatibility (the type was originally defined there).
 
 ### useLayerColors
 
-- Called on each render (no subscription); reads once from `getComputedStyle`.
-- For live theme-switch reactivity the caller must subscribe to a `matchMedia`
-  or `data-theme` attribute mutation and force a re-render. No built-in
-  subscription in the current implementation.
+The hook has a live data-theme subscription, so mounted consumers refresh colors on a theme change.
 
 ## 6. data-testid contract
 
@@ -295,21 +266,10 @@ digits: e.g. `unicode-char-U+2014` for em-dash.
 
 ## 9. Open questions
 
-1. **UnicodePicker size / scroll**: the card grid has a hard-coded `maxHeight:
-   160px`. Whether this is appropriate for all deployment contexts (small laptop
-   screens vs. external monitors) has not been validated.
+UnicodePicker sizing across deployment contexts and a configurable slash-map extension policy have not
+been established here. `pound` is already an alias and is not an example of a missing entry.
+Theme reactivity is implemented through a data-theme observer. ComponentPalette authors structural
+components; TypographySection owns canonical inline typography.
 
-2. **Slash-command coverage**: the SLASH_MAP covers ~80 names. Common OCR book
-   characters (e.g. `\pound`, `\asterism`, Old English letters) may be missing.
-   A process for extending the map (community-maintained? user-configurable?) is
-   not defined.
-
-3. **useLayerColors reactivity**: reading CSS tokens once per render is correct
-   for initial load and for most interactions. If the user switches theme (e.g.
-   via a settings panel) mid-session, Konva canvases that cache the color values
-   will not automatically update. A subscription mechanism (MutationObserver on
-   `document.documentElement`'s `data-theme` attribute) would solve this.
-
-4. **ComponentPalette scope**: `ApplyComponentRequest.enabled` toggles a
-   structural component for the whole word. `TypographySection` does not author
-   structural components.
+Evidence: `useLayerColors.ts` and its tests, UnicodePicker.tsx and ComponentPalette.tsx.
+Verified by source/test inspection on 2026-11-13; no new sizing or extension policy is chosen.

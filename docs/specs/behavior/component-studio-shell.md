@@ -3,7 +3,7 @@ kind: spec
 status: active
 owner: maintainers
 created: 2026-06-01
-last_verified: 2026-07-13
+last_verified: 2026-11-13
 ---
 
 # Behavior unit spec - Studio shell
@@ -59,6 +59,19 @@ last_verified: 2026-07-13
 
 ### B-SHELL-003 - Drawer collapse and tab selection persist through UI prefs
 
+**Implementation reconciliation (2026-11-13).** The current source/test scope is recorded below.
+The original acceptance fields remain after it; any stronger unimplemented expectation is retained, not waived.
+
+- **Observed trigger:** Collapse/expand the drawer or switch its tab.
+- **Current behavior:** `useUiPrefs` stores drawerOpen/drawerTab in memory. Drawer supports Worklist,
+  Hierarchy, Text, Queue and History. Theme persistence does not establish drawer-state persistence.
+- **Residual acceptance:** Browser-local drawer persistence and invalid-tab fallback from the earlier
+  record are not implemented. An invalid tab currently falls through to HistoryPanel; desired fallback
+  remains an explicit UI-contract discrepancy.
+- **Additional evidence:** `frontend/src/components/shell/Drawer.test.tsx`, `frontend/src/stores/ui-prefs.ts`.
+
+**Original acceptance fields:**
+
 - **Flow(s):** -
 - **Composed by:** B-PROJECT-001
 - **Trigger:** User clicks `drawer-collapse-btn`, `drawer-expand-btn`, or
@@ -75,6 +88,17 @@ last_verified: 2026-07-13
 - **Test:** -
 
 ### B-SHELL-004 - Hotkey help opens from rail or quick-search keycap
+
+**Implementation reconciliation (2026-11-13).** The current source/test scope is recorded below.
+The original acceptance fields remain after it; any stronger unimplemented expectation is retained, not waived.
+
+- **Observed trigger:** Click the rail Hotkeys button or the QuickSearch keycap.
+- **Current behavior:** Rail Hotkeys opens hotkey-help-dialog. The search keycap focuses the search input;
+  it does not open help. Both are client-side actions without API writes.
+- **Additional evidence:** `frontend/src/components/shell/Rail.test.tsx`, `QuickSearch.test.tsx`
+  (`clicking the ⌘K keycap focuses the search input`, `clicking the ⌘K keycap does NOT open the hotkeyHelp dialog`).
+
+**Original acceptance fields:**
 
 - **Flow(s):** -
 - **Composed by:** -

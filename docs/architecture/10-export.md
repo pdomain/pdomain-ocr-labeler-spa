@@ -3,7 +3,7 @@ kind: architecture
 status: built
 owner: maintainers
 created: 2026-05-06
-last_verified: 2026-07-13
+last_verified: 2026-11-13
 ---
 
 # 10 — Export Dialog + DocTR Export Operation
@@ -221,21 +221,15 @@ SPA doesn't reshape it.
 
 ## 5. The headless CLI
 
-The legacy ships `pd-ocr-labeler-export` as a separate console script
-for headless training-data generation. The SPA ships the same:
+`pdomain-ocr-labeler-spa-export` runs `core.jobs.handlers.export_cli:main`. Required options are `--data-root`
+and `--project-id`; optional controls include `--project-root`, `--style`, `--component`,
+`--detection-only`, `--recognition-only`, `--classification`, `--page-index` and `-v`. It resolves stored
+pages first. It has no required positional project path.
 
-```sh
-pdomain-ocr-labeler-spa-export <labeled_dir> <output_dir> \
-    [--prefix PREFIX] \
-    [--all-pages | --require-gt] \
-    [--style STYLE | --component COMPONENT | --classification] \
-    [--detection-only | --recognition-only] \
-    [-v]
-```
-
-Implementation: `src/pdomain_ocr_labeler_spa/operations/export/cli.py`.
-Reuses the same `DocTRExportOperations` driver as the dialog. Doesn't
-boot the FastAPI server; reads envelopes directly from disk.
+`--classification` changes recognition-label formatting with multiple labels; it does not choose a separate
+classification output directory. Style subfolders or `all` are used by the exporter.
+`tests/integration/test_export_list_and_cli_store.py::test_cli_export_store_first_non_zero_pages` and
+`tests/unit/core/test_export_cli.py` cover the headless path.
 
 ## 5.1 Cross-application export exchange
 

@@ -3,7 +3,7 @@ kind: architecture
 status: built
 owner: maintainers
 created: 2026-05-06
-last_verified: 2026-07-13
+last_verified: 2026-11-13
 ---
 
 # 00 — Overview
@@ -53,10 +53,9 @@ then jump to the per-area spec for whatever you're implementing.
 - **No multi-user collaboration.** One user, possibly multiple browser
   tabs against the same backend, sharing in-memory state.
   ([D-023](../../specs/17-decisions.md), [D-042](../../specs/17-decisions.md))
-- **No database / Postgres / SQLAlchemy.** Persistence is filesystem-
-  only via atomic-rename JSON sidecars + `config.yaml`. No
-  `database/` adapter axis, no migrations, no ORM. The schema seam is
-  "ready if we ever add one" but adding one is far-future work.
+- **Managed database adapters remain deferred.** Current local persistence uses
+  SQLite events at `.pd-pages/events.db` and content-addressed blobs. This shipped
+  local store does not introduce Postgres, SQLAlchemy, or a managed-adapter axis.
   ([D-042](../../specs/17-decisions.md))
 - **No public API contract.** The REST surface is intentionally
   unstable across SPA versions. Internal use only — the SPA frontend
@@ -67,9 +66,9 @@ then jump to the per-area spec for whatever you're implementing.
   DocTR via `local_doctr`. The full `IOCREngine` adapter axis
   (`local_doctr | modal | shared_container`) is wired in v1 with the
   latter two as `NotImplementedYet` stubs ([D-018](../../specs/17-decisions.md)).
-- **No new persistence schema.** `UserPageEnvelope` schema
-  `pd_ocr_labeler.user_page` v2.1 is preserved byte-for-byte
-  ([`09-persistence.md`](09-persistence.md)).
+- **Source inputs are separate from current persistence.** Current page edits
+  use the event/blob store
+  ([`09-persistence.md`](09-persistence.md), [`29-page-loading-and-history.md`](29-page-loading-and-history.md)).
 - **No new image formats / coordinate systems.** Bbox geometry,
   refine algorithms, coordinate transforms are delegated unchanged to
   `pdomain-book-tools` ([D-026](../../specs/17-decisions.md); refactor delegated).
@@ -82,7 +81,7 @@ then jump to the per-area spec for whatever you're implementing.
 |---|---|---|
 | Web framework | **FastAPI** | Same as pgdp-prep. Native async, OpenAPI export, Pydantic v2. |
 | Server | **uvicorn[standard]** | Same as pgdp-prep. |
-| Persistence | **Filesystem only** | Single-user; no DB needed for v1. Schema seam ready if we ever add one. |
+| Persistence | **Local SQLite events + content-addressed blobs** | `LabelerPageStore` owns project page persistence; jobs remain in memory. |
 | Storage adapter | **`IStorage` Protocol** with `filesystem` impl + `s3` `NotImplementedYet` stub | Image cache served via the adapter, not raw StaticFiles. ([D-019](../../specs/17-decisions.md)) |
 | Auth | **`IAuth` Protocol**, `none` impl only | Seam in place; no JWT for v1. ([D-005](../../specs/17-decisions.md)) |
 | OCR | `IOCREngine` Protocol + `local_doctr` impl + `modal` / `shared_container` `NotImplementedYet` stubs | Wraps `pdomain_book_tools.ocr.document.Document.from_image_ocr_via_doctr`. ([D-018](../../specs/17-decisions.md)) |
@@ -99,11 +98,11 @@ then jump to the per-area spec for whatever you're implementing.
 | Routing | **`react-router-dom` v7** | Same as pgdp-prep. |
 | Server state | **`@tanstack/react-query` v5** | Same as pgdp-prep. |
 | Local state | `useState` + `useReducer`; **`zustand`** for cross-page UI prefs (filter toggle, layer visibility, panel split). | pgdp-prep declares zustand but doesn't use it; we will. |
-| Styling | **Tailwind 3.4** + **shadcn/ui** primitives (`@radix-ui` under the hood) | Closes the "spec mentions shadcn but code doesn't use it" gap from pgdp-prep. ([D-004](../../specs/17-decisions.md)) |
+| Styling | **Tailwind** + **shadcn/ui** primitives (`@radix-ui` under the hood) | Closes the "spec mentions shadcn but code doesn't use it" gap from pgdp-prep. ([D-004](../../specs/17-decisions.md)) |
 | Forms | None — controlled inputs + `useMutation` | Match pgdp-prep. Validate via Pydantic on the server, surface `details` array per-field via the toast system. |
 | Toasts | **`sonner`** | One-liner; pgdp-prep ships nothing for this. Closes the gap. |
 | Hotkeys | **`react-hotkeys-hook`** | Closes the legacy gap; see [`12-hotkeys-a11y.md`](12-hotkeys-a11y.md). ([D-009](../../specs/17-decisions.md), [D-022](../../specs/17-decisions.md)) |
-| Image canvas | **raw `<canvas>` (default)** with research spike at M4 to confirm | Konva is the alternate option; final choice deferred per [D-020](../../specs/17-decisions.md). |
+| Image canvas | **Shared `PdUiPageImageCanvas` Konva host** | Labeler owns domain overlays and gestures; see [renderer ownership](21-konva-renderer.md). |
 | Plain editors | **`<textarea readOnly>`** + monospace CSS | Drop CodeMirror; not earning its weight. ([D-008](../../specs/17-decisions.md)) |
 | Virtualisation | **`@tanstack/react-virtual`** | For the line-card list on heavy pages. (Q7 → resolved as part of frontend stack) |
 | Testing (unit) | **Vitest** + **@testing-library/react** | Same as pgdp-prep. |
@@ -115,13 +114,13 @@ then jump to the per-area spec for whatever you're implementing.
 | Tool | Notes |
 |---|---|
 | Python build | `hatchling` + `hatch-vcs` (pgdp-prep). |
-| Wheel-with-SPA | `force-include = src/pdomain_ocr_labeler_spa/static` + `build_hooks/spa_check.py`. |
+| Wheel-with-SPA | Global Hatch artifacts include `static/`; `build_hooks/spa_check.py` rejects a missing bundle. |
 | Lockfile | `uv.lock`. |
 | Lint | `ruff` (Python) + `eslint` flat config (TS) — pgdp-prep is missing the eslint config; we add one. |
 | Format | `ruff format` + `prettier`. |
-| Type-check | TypeScript `strict`; **`pyright`** added (closes pgdp-prep's gap). |
+| Type-check | TypeScript application and test projects; configured **basedpyright** backend gate. |
 | Pre-commit | Same hooks as pgdp-prep + ESLint. |
-| CI | `ci.yml` runs push/PR lint, tests, frontend build, and wheel checks. `release.yml` is workflow-dispatch only, reruns release CI from the exact tag, uploads one wheel to the GitHub Release, and dispatches `pdomain-index-pip`. |
+| CI | `just ci` runs local Python/frontend checks, tests, build and strict docgraph. Release scripts create GitHub assets; index publication is separate. |
 | Versions | `mise.toml` pinning Node 24 + Python 3.13. |
 
 ---
@@ -170,94 +169,35 @@ then jump to the per-area spec for whatever you're implementing.
 
 ### Key design rules
 
-1. **`build_app(settings)` factory.** Same as pgdp-prep
-   `bootstrap.py:144-268`. Every test wires its own `Settings`
-   explicitly. The `__main__` script reads env vars itself.
-2. **In-memory state on `app.state`.** `AppState` lives there; routers
-   pull it via `Depends(get_app_state)`. No global singleton.
-3. **One state mutation per HTTP request.** Bulk operations land as
-   single endpoints (e.g.
-   `POST /api/page/{idx0}/words/validate-batch`) so the SPA can do one
-   round-trip + one optimistic update. Mirrors the legacy
-   `set_words_validated` pattern (single batched call → single
-   autosave).
-4. **Autosave is server-side.** The SPA calls a single mutation endpoint
-   per user action; the server writes through to disk + image cache.
-   No client-side autosave timer.
-5. **OpenAPI is source of truth.** `just openapi-export` regenerates
-   `frontend/src/api/types.ts`. CI gate: `git diff --exit-code` after
-   re-running. Closes the pgdp-prep drift-check gap.
-6. **`IStorage` keys are project-scoped.** Same sandboxing primitive as
-   pgdp-prep `api/data/assets.py:45`.
-7. **No backwards-compat shims.** New repo. We only need to read +
-   write the legacy `UserPageEnvelope` v2.1; we don't preserve any
-   transient v1 envelopes (they all auto-upgrade on save).
-8. **Driver-facing surface is part of the contract.** Every
-   `data-testid` and URL shape lives in
-   [`13-driver-contract.md`](13-driver-contract.md) and has a
-   conformance test.
-
----
+1. Adapters isolate storage/auth/OCR; managed deployment axes remain deferred under D-042.
+2. AppState contains frozen wiring. ActiveProjectCarrier and ProjectState carry separate mutable state.
+3. Batch routes and background jobs are explicit public contracts in the generated schema.
+4. Mutations persist current content/sidecars through the local event/blob store. Selection is session state.
+5. OpenAPI export regenerates types; CI typechecks them. The current recipe has no standalone git-diff gate.
+6. Blob/image paths and source-root selection retain their implemented sandbox/verified-image boundaries.
+7. Compatibility is specific: legacy URLs have 301 redirects, while removed typography payloads are rejected.
+8. The mounted driver contract belongs in architecture 13; static selector checks are not exhaustive
+   feature/e2e verification.
 
 ## State model
 
-The legacy labeler has three nested state objects:
+The backend's frozen AppState wires services and settings. ActiveProjectCarrier and ProjectState hold
+active project/page state separately. PageState contains hydrated OCR content, sidecars and generation/dirty
+tracking; per-page locks synchronize mutations and relevant payload reads.
 
-- `AppState` (per-tab today; will become **per-process** in the SPA)
-  — knows projects-root, selected project, OCR config, notifications.
-- `ProjectState` (per project) — knows the loaded `Project`, the
-  current page index, the per-page-index `PageState` map, the GT map.
-- `PageState` (per page) — knows the `pdomain_book_tools.ocr.page.Page`
-  object, dirty flags, line/word selection sets, the in-memory image,
-  per-line / per-word event hooks.
-
-Per-tab isolation in the SPA is moved to the **frontend**:
-
-- Backend keeps a single `AppState` with one `ProjectState` per
-  project the user has opened in this server lifetime.
-- Frontend keeps per-tab UI state (selection, filter toggle, layer
-  visibility, splitter position, current page index) in either local
-  state or zustand. Two tabs on the same page share document state
-  (same `PageState` on the server) but each has independent UI.
-
-`PageState` mutations on the server fan out via SSE so other tabs
-viewing the same project converge eventually. ([D-023](../../specs/17-decisions.md))
-
----
+Each browser tab owns its selection and presentation state. Tabs can share persisted document state without
+a content mutation navigating another viewer. Application events and query invalidation refresh affected
+views. UI preference persistence is field-specific; the entire store is not a universal localStorage contract.
 
 ## Dataflow per user action
 
-The shape `(user action) → (HTTP/SSE) → (server logic) → (client refetch)`
-applies uniformly. Examples:
+The common path is action → API/job → persistence where appropriate → query refresh. A word validation
+request reaches the actual validated/validate-batch route, saves current content and returns page state.
+Page refine uses `/refine`, queues a job and reports lifecycle through Job-plus-event SSE.
+Reload OCR Edited passes use_edited_image to a job that reads persisted edited pixels.
 
-### Click "Validate" on a single word
-
-- SPA optimistically toggles `is_validated` in the cached query result.
-- `POST /api/projects/{id}/pages/{idx0}/words/{line_idx}/{word_idx}/validate`
-  with `{validated: true}`.
-- Server: `PageState.toggle_word_validated` → autosave to image cache.
-- Server returns the updated `WordMatch` for that word.
-- SPA reconciles cache; if the optimistic update was wrong, the server
-  response wins.
-
-### Click "Refine all bboxes on this page"
-
-- SPA calls `POST /api/projects/{id}/pages/{idx0}/refine-bboxes`.
-- Long-running (>500ms typical). Server returns `202 Accepted` with a
-  `job_id`.
-- SPA opens `EventSource(/api/jobs/{job_id}/events)` for progress.
-- Server's `JobRunner` runs `PageState.refine_all_bboxes`, emits
-  `progress(current, total, message)` events, terminal `complete` event.
-- On terminal: SPA invalidates the page-state query for this page;
-  refetch hydrates the new bboxes.
-
-### Reload OCR (Edited image)
-
-- Same shape as Refine, with `use_edited_image=true` payload.
-- Server: `PageState.reload_page_with_ocr(use_edited_image=True)`.
-- Different from "refine" only in handler; same job-runner shape.
-
----
+[Backend](02-backend.md), [page mutation ownership](23-page-payload-backend.md),
+[history/loading](29-page-loading-and-history.md) and [runtime flows](runtime-flows.md) own the precise paths.
 
 ## Shipped milestones
 
@@ -293,7 +233,7 @@ Future work is the [roadmap](../context/intent-map.md). Repository ownership is 
 | Auto-rotation (M9.1/M9.2) | `19-auto-rotation.md` |
 | Glyph annotations (M11) | [`20-glyph-annotations.md`](20-glyph-annotations.md) |
 | Konva renderer impl | `21-konva-renderer.md` |
-| Page surface wire-up | `22-page-surface-wireup.md` |
+| Page composition | `24-shell-layout.md` |
 | Page payload backend impl | `23-page-payload-backend.md` |
 | Shell / Studio layout | `24-shell-layout.md` |
 | Drawer (Worklist / Hierarchy / Bulk) | `25-drawer-worklist.md` |
@@ -306,3 +246,12 @@ Future work is the [roadmap](../context/intent-map.md). Repository ownership is 
 
 If a question isn't answered by the linked spec, **stop and add it to
 [`OPEN_QUESTIONS.md`](../../OPEN_QUESTIONS.md)** rather than guessing.
+
+## Current implementation evidence
+
+- Code: `core/persistence/page_store.py::LabelerPageStore`, `bootstrap.py::build_app`,
+  and `frontend/src/components/PageImageCanvas.tsx` establish local storage, app wiring, and the shared canvas host.
+- Tests: `tests/integration/test_save_page_route_roundtrip.py::test_save_page_route_persists_content_for_fresh_store_reload`
+  and `frontend/src/components/PageImageCanvas.test.tsx` cover durable writes and the canvas skeleton.
+- Build and gates: `pyproject.toml`, `build_hooks/spa_check.py`, and `justfile`.
+- Verified: 2026-11-13 by source and test inspection during the architecture migration.

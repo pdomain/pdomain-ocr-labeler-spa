@@ -3,7 +3,7 @@ kind: architecture
 status: built
 owner: maintainers
 created: 2026-11-07
-last_verified: 2026-11-12
+last_verified: 2026-11-13
 ---
 
 # 20 — Glyph annotations

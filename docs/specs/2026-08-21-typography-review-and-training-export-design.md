@@ -3,7 +3,7 @@ kind: spec
 status: partial
 owner: maintainers
 created: 2026-08-21
-last_verified: 2026-11-07
+last_verified: 2026-11-13
 repo: pdomain/pdomain-ocr-labeler-spa
 ---
 
@@ -19,7 +19,7 @@ undo, and the unresolved owner decisions remain design work. The roadmap is
 - **Kind:** spec
 - **Status:** partial
 - **Owner:** maintainers
-- **Last verified:** 2026-11-07
+- **Last verified:** 2026-11-13
 - **Read when:** designing or implementing typography review, page completion, contextual annotation, or typography
   training export.
 - **Search terms:** typography review, grapheme spans, page completion, corrected training data, contextual crop,
@@ -255,7 +255,7 @@ fixtures, page blobs, and event-store heads. The owner will approve a deletion r
 and records. This inventory informs cleanup only; it does not create a migration or compatibility requirement.
 
 The completed inventory found no persisted records. See
-[`../research/2026-08-22-char-range-deletion-inventory.md`](../research/2026-08-22-char-range-deletion-inventory.md).
+[`../decisions/2026-11-13-retire-completed-doc-inventories.md`](../decisions/2026-11-13-retire-completed-doc-inventories.md).
 
 The clean break:
 
