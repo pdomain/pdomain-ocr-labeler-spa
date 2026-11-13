@@ -184,7 +184,7 @@ then jump to the per-area spec for whatever you're implementing.
 4. **Autosave is server-side.** The SPA calls a single mutation endpoint
    per user action; the server writes through to disk + image cache.
    No client-side autosave timer.
-5. **OpenAPI is source of truth.** `make openapi-export` regenerates
+5. **OpenAPI is source of truth.** `just openapi-export` regenerates
    `frontend/src/api/types.ts`. CI gate: `git diff --exit-code` after
    re-running. Closes the pgdp-prep drift-check gap.
 6. **`IStorage` keys are project-scoped.** Same sandboxing primitive as

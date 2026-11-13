@@ -11,7 +11,7 @@ V1 opens the served server URL in Chromium and asserts:
      own JS/CSS/font assets all resolve under the StaticFiles mount).
 
 Run:
-    make e2e
+    just e2e
     # or
     uv run --group e2e pytest tests/e2e/test_parity_app_loads.py --browser chromium -v
 

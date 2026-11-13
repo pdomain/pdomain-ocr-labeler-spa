@@ -36,13 +36,13 @@ root.
 
 ```sh
 mise install            # Node 24 + Python 3.13 per mise.toml
-make setup              # uv sync + pre-commit install + version refresh
+just setup              # uv sync + pre-commit install + version refresh
 ```
 
 For frontend work, also run:
 
 ```sh
-make frontend-install   # pnpm install inside frontend/
+just frontend-install   # pnpm install inside frontend/
 ```
 
 ---
@@ -52,7 +52,7 @@ make frontend-install   # pnpm install inside frontend/
 ### Production SPA (simplest)
 
 ```sh
-make run
+just run
 # builds frontend if needed, starts backend, opens browser at :8080
 ```
 
@@ -69,10 +69,10 @@ Two terminals:
 
 ```sh
 # Terminal 1 — backend with auto-reload
-make dev               # uvicorn --reload on :8080
+just dev               # uvicorn --reload on :8080
 
 # Terminal 2 — Vite dev server with HMR
-make frontend-dev      # Vite on :5173; proxies /api and /image-cache to backend
+just frontend-dev      # Vite on :5173; proxies /api and /image-cache to backend
 ```
 
 Open `http://localhost:5173`. The Vite proxy reads `.pdlabeler-port` (written
@@ -83,12 +83,12 @@ by the backend at startup) and forwards API calls automatically.
 ## Tests
 
 ```sh
-make test              # unit + conformance; fast; no real OCR
-make integration       # slow tests with real DocTR (~10 min; GPU optional)
-make e2e               # Playwright (requires: make frontend-build first)
-make frontend-test     # Vitest jsdom tests
+just test              # unit + conformance; fast; no real OCR
+just integration       # slow tests with real DocTR (~10 min; GPU optional)
+just e2e               # builds the SPA, then runs Playwright
+just frontend-test     # Vitest jsdom tests
 
-make ci AI=1           # full CI pipeline; run before every commit
+AI=1 just ci           # full CI pipeline; run before every commit
 ```
 
 ---
@@ -96,20 +96,23 @@ make ci AI=1           # full CI pipeline; run before every commit
 ## Lint and typecheck
 
 ```sh
-make lint              # ruff (Python) + eslint + tsc (TypeScript)
-make typecheck         # basedpyright only
-make format            # ruff format + prettier (writes in place)
-make pre-commit-check  # all pre-commit hooks on every tracked file
+just lint              # Python lint fixes
+just frontend-lint     # ESLint fixes
+just frontend-typecheck # application and test TypeScript projects
+just typecheck         # basedpyright only
+just format            # Python format only
+just frontend-format   # Prettier (writes in place)
+just pre-commit-check  # all pre-commit hooks on every tracked file
 ```
 
-Pre-commit runs automatically on `git commit` after `make setup`.
+Pre-commit runs automatically on `git commit` after `just setup`.
 
 ---
 
 ## After changing FastAPI models
 
 ```sh
-make openapi-export
+just openapi-export
 # exports /openapi.json → regenerates frontend/src/api/types.ts
 ```
 
@@ -123,30 +126,34 @@ this, so any drift fails the build.
 When iterating on `pdomain-book-tools` or `pdomain-ui` alongside this repo:
 
 ```sh
-make local-setup           # clone sibling repos if missing
-make local-dev             # switch Python to editable + link npm sibling
-make local-check           # print current mode + per-sibling resolution
-make local-frontend-build  # build frontend against local pdomain-ui
-make local-run             # run app against local workspace
+just local-setup           # clone sibling repos if missing
+just local-dev             # switch Python to editable + link npm sibling
+just local-check           # print current mode + per-sibling resolution
+just local-frontend-build  # build frontend against local pdomain-ui
+just local-run             # run app against local workspace
 ```
 
-To revert to registry deps:
+To revert to registry deps, run from the canonical checkout root:
 
 ```sh
-make local-uninstall
+uv sync --locked --group dev && just frontend-install && \
+  rm -f "${UV_PROJECT_ENVIRONMENT:-.venv}/.pdomain-local-mode" \
+        "${UV_PROJECT_ENVIRONMENT:-.venv}/.pdomain-dev-local"
 ```
+
+Clear the local-mode markers only after both locked installs succeed.
 
 ---
 
 ## Building a distributable wheel
 
 ```sh
-make frontend-build    # writes SPA bundle into src/pdomain_ocr_labeler_spa/static/
-make build             # uv build --wheel → dist/*.whl
+just frontend-build    # writes SPA bundle into src/pdomain_ocr_labeler_spa/static/
+just build             # OpenAPI + SPA + explicit sdist, then wheel → dist/
 ```
 
 `build_hooks/spa_check.py` refuses to produce a wheel if `static/` is empty —
-a forgotten `make frontend-build` cannot ship a blank page.
+a forgotten `just frontend-build` cannot ship a blank page.
 
 ---
 
@@ -170,11 +177,11 @@ All variables use the `PDLABELER_` prefix (`settings.py`).
 
 | Symptom | Fix |
 |---------|-----|
-| "SPA not built" error on `make run` | `make frontend-build` |
-| `ModuleNotFoundError` after merging a worktree | `uv sync && make local-setup-py` |
-| pnpm link not applying after `make local-dev` | `rm -rf frontend/node_modules frontend/pnpm-lock.yaml && pnpm install` inside `frontend/` |
+| "SPA not built" error on `just run` | `just frontend-build` |
+| `ModuleNotFoundError` after merging a worktree | `uv sync --locked --group dev && just local-setup-py` |
+| pnpm link not applying after `just local-dev` | `rm -rf frontend/node_modules frontend/pnpm-lock.yaml && pnpm install` inside `frontend/` |
 | Port conflict on startup | Set `PDLABELER_PORT=NNNN` or let the port-probing pick the next free port |
-| basedpyright errors after `make openapi-export` | Regenerated `types.ts` may expose new type gaps — fix them before committing |
+| TypeScript errors after `just openapi-export` | Regenerated `types.ts` may expose new type gaps — fix them before committing |
 
 ## Trigger
 
@@ -183,17 +190,17 @@ Use this runbook when developing this SPA against editable or linked sibling
 
 ## Preconditions
 
-Run `make local-setup` so required siblings exist. Preserve the current lockfile
+Run `just local-setup` so required siblings exist. Preserve the current lockfile
 and any intentional local links before switching modes.
 
 ## Steps
 
-Run `make local-dev`, inspect resolution with `make local-check`, and use
-`make local-run` or the local frontend targets documented above.
+Run `just local-dev`, inspect resolution with `just local-check`, and use
+`just local-run` or the local frontend targets documented above.
 
 ## Verification
 
-Require `make local-check` to report the intended editable Python and linked npm
+Require `just local-check` to report the intended editable Python and linked npm
 sources. Run the focused tests for any changed sibling integration.
 
 ## Rollback

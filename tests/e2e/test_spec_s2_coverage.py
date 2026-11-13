@@ -24,7 +24,7 @@ Spec: docs/architecture/13-driver-contract.md §2
 Issue: close #265
 
 Run:
-    make e2e
+    just e2e
     # or:
     uv run --group e2e pytest tests/e2e/test_spec_s2_coverage.py -v
 """

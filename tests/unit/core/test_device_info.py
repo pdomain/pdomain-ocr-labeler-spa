@@ -2,7 +2,7 @@
 
 The helper resolves the torch device that pdomain_book_tools / DocTR will
 pick up at OCR time, and renders it as a one-line string suitable for
-``make run`` startup logging. Critically:
+``just run`` startup logging. Critically:
 
 - It must NEVER raise — torch may be absent in some test envs and the
   caller (``__main__.main``) prints the result before uvicorn binds, so

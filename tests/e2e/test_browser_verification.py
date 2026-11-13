@@ -2,7 +2,7 @@
 
 M14 Browser Verification (plan 2026-06-01-page-split-labeler-spa.md).
 
-Run with:   make e2e
+Run with:   just e2e
 Or inline:  uv run --group e2e pytest tests/e2e/test_browser_verification.py --browser chromium -v
 """
 

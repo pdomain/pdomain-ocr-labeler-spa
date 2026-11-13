@@ -16,7 +16,7 @@ CU-3.1 additions (2026-05-21):
   called in ProjectPage (BUG-KBD-2 regression guard)
 
 Run:
-    make e2e
+    just e2e
     # or
     uv run --group e2e pytest tests/e2e/test_keyboard_only.py -v
 """
@@ -97,7 +97,7 @@ def test_page_navigation_keyboard_only(live_server: LiveServer, page: Page) -> N
     Regression test for BUG-KBD-2 (useGlobalHotkeys was defined but not called).
     Fixed in ProjectPage.tsx:328. Also covers issue #402 — Ctrl+ArrowLeft was
     silently failing due to a missing SPA static bundle in the test environment;
-    not a code defect. The ``make e2e`` target runs ``make frontend-build`` first
+    not a code defect. The ``just e2e`` target runs ``just frontend-build`` first
     which populates ``src/pdomain_ocr_labeler_spa/static/``.
 
     Audit: docs/archive/research/M9.5-keyboard-audit.md §7

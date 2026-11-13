@@ -13,7 +13,7 @@ Spec: docs/specs/2026-05-12-hotkeys-a11y-design.md
 Issue: #238
 
 Run:
-    make e2e
+    just e2e
     # or targeted:
     uv run pytest tests/e2e/test_a11y.py -v
 """
@@ -38,7 +38,7 @@ def _inject_axe(page: Page) -> None:
     """Inject axe-core into the current page context."""
     if not _AXE_BUNDLE.exists():
         pytest.skip(
-            f"axe-core bundle not found — run `make frontend-install` first (expected: {_AXE_BUNDLE})"
+            f"axe-core bundle not found — run `just frontend-install` first (expected: {_AXE_BUNDLE})"
         )
     page.add_script_tag(path=str(_AXE_BUNDLE))
 

@@ -64,7 +64,7 @@ def isolated_live_server(tmp_path_factory: pytest.TempPathFactory) -> Iterator[L
     its own tmp source/data roots avoids that.
     """
     if not _spa_built():
-        pytest.skip("SPA not built — run `make frontend-build` (or `make e2e`) before E2E tests")
+        pytest.skip("SPA not built — run `just frontend-build` (or `just e2e`) before E2E tests")
 
     data_root = tmp_path_factory.mktemp("kbd-confirm-data")
     cache_root = tmp_path_factory.mktemp("kbd-confirm-cache")

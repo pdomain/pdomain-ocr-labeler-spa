@@ -22,7 +22,7 @@ Spec: docs/specs/2026-05-12-driver-contract-design.md §Conformance test
 Issue #242
 
 Run:
-    make e2e
+    just e2e
     # or
     uv run pytest tests/e2e/test_driver_contract.py -v
 """

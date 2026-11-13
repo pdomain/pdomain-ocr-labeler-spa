@@ -1,10 +1,10 @@
-"""Smoke tests for the repo Makefile.
+"""Smoke tests for the repo justfile.
 
 These guard against accidental syntax errors that would hide behind the
 fact that most contributors only invoke a couple of targets manually
-(`make test`, `make frontend-build`). The unit-test suite exercises the
+(`just test`, `just frontend-build`). The unit-test suite exercises the
 parse + dry-run path so a malformed recipe surfaces in CI rather than
-the first time someone needs `make build`.
+the first time someone needs `just build`.
 """
 
 from __future__ import annotations
@@ -16,47 +16,49 @@ from pathlib import Path
 import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-MAKEFILE = REPO_ROOT / "Makefile"
 JUSTFILE = REPO_ROOT / "justfile"
 
 
-def _have_make() -> bool:
-    return shutil.which("make") is not None
+def _have_just() -> bool:
+    return shutil.which("just") is not None
 
 
-@pytest.mark.skipif(not _have_make(), reason="`make` not on PATH")
-def test_makefile_exists() -> None:
-    assert MAKEFILE.exists(), f"Makefile missing at {MAKEFILE}"
+@pytest.mark.skipif(not _have_just(), reason="`just` not on PATH")
+def test_justfile_exists() -> None:
+    assert JUSTFILE.exists(), f"justfile missing at {JUSTFILE}"
 
 
-@pytest.mark.skipif(not _have_make(), reason="`make` not on PATH")
+def test_make_shim_is_removed() -> None:
+    assert not (REPO_ROOT / "Makefile").exists()
+
+
+@pytest.mark.skipif(not _have_just(), reason="`just` not on PATH")
 def test_makefile_help_target_runs() -> None:
-    """`make help` should parse the Makefile and exit 0.
+    """`just help` should parse the justfile and exit 0.
 
     `help` is recipe-only (no shell side effects beyond grep/awk), so it
     is the cheapest way to assert the file parses cleanly.
     """
     result = subprocess.run(
-        ["make", "-C", str(REPO_ROOT), "AI=", "help"],
+        ["just", "--justfile", str(JUSTFILE), "help"],
         capture_output=True,
         text=True,
         timeout=20,
     )
     assert result.returncode == 0, (
-        f"`make help` failed (rc={result.returncode}):\nstdout:\n{result.stdout}\nstderr:\n{result.stderr}"
+        f"`just help` failed (rc={result.returncode}):\nstdout:\n{result.stdout}\nstderr:\n{result.stderr}"
     )
     # Sanity: a few key targets should appear in help output.
     for target in ("test", "frontend-install", "frontend-build", "build", "ci"):
-        assert target in result.stdout, f"target '{target}' missing from `make help` output"
+        assert target in result.stdout, f"target '{target}' missing from `just help` output"
 
 
-@pytest.mark.skipif(not _have_make(), reason="`make` not on PATH")
+@pytest.mark.skipif(not _have_just(), reason="`just` not on PATH")
 def test_makefile_dry_run_test_target() -> None:
     """`just --show test` should dry-run-render the test recipe without errors.
 
-    `-n` (no-exec) tells make to print the recipe lines without running
-    them, which exercises the parser + variable expansion. A typo in any
-    target the recipe depends on would surface here.
+    `--show` prints the recipe without executing its commands. The rendered
+    text must still contain the selected pytest invocation.
     """
     result = subprocess.run(
         ["just", "--justfile", str(JUSTFILE), "--show", "test"],
@@ -74,12 +76,12 @@ def test_makefile_dry_run_test_target() -> None:
     )
 
 
-@pytest.mark.skipif(not _have_make(), reason="`make` not on PATH")
+@pytest.mark.skipif(not _have_just(), reason="`just` not on PATH")
 def test_makefile_run_target_dry_runs_and_invokes_ui() -> None:
     """`just --show run` should reference frontend-build and the UI entry point.
 
-    `make run` is the user-facing "just run the labeler" target —
-    distinct from `make dev` (which expects Vite on :5173). It must:
+    `just run` is the user-facing "just run the labeler" target —
+    distinct from `just dev` (which expects Vite on :5173). It must:
     - Ensure the SPA bundle exists (depend on / call `frontend-build`).
     - Launch `pdomain-ocr-labeler-ui` without `--reload` and without
       `--frontend-dev` (we are SERVING the bundle, not developing it).
@@ -99,23 +101,21 @@ def test_makefile_run_target_dry_runs_and_invokes_ui() -> None:
         f"stdout:\n{result.stdout}\nstderr:\n{result.stderr}"
     )
     out = result.stdout
-    # Either the recipe shells out to frontend-build, or it depends on
-    # it (in which case `make -n` renders the dependency's recipe
-    # first). Either way the dry-run output must mention the SPA build.
+    # The displayed recipe must retain its frontend-build call.
     assert "frontend-build" in out or "Building frontend" in out, (
         f"`just --show run` should ensure the SPA is built before serving:\n{out}"
     )
     assert "pdomain-ocr-labeler-ui" in out, f"`just --show run` should launch pdomain-ocr-labeler-ui:\n{out}"
-    # Must NOT enable reload or frontend-dev — those are `make dev`'s job.
-    assert "--reload" not in out, f"`make run` must not enable --reload:\n{out}"
-    assert "--frontend-dev" not in out, f"`make run` must not enable --frontend-dev:\n{out}"
+    # Must NOT enable reload or frontend-dev — those are `just dev`'s job.
+    assert "--reload" not in out, f"`just run` must not enable --reload:\n{out}"
+    assert "--frontend-dev" not in out, f"`just run` must not enable --frontend-dev:\n{out}"
 
 
-@pytest.mark.skipif(not _have_make(), reason="`make` not on PATH")
+@pytest.mark.skipif(not _have_just(), reason="`just` not on PATH")
 def test_makefile_help_lists_run_target() -> None:
-    """`make help` should advertise the `run` target alongside `dev`."""
+    """`just help` should advertise the `run` target alongside `dev`."""
     result = subprocess.run(
-        ["make", "-C", str(REPO_ROOT), "AI=", "help"],
+        ["just", "--justfile", str(JUSTFILE), "help"],
         capture_output=True,
         text=True,
         timeout=20,
@@ -126,74 +126,40 @@ def test_makefile_help_lists_run_target() -> None:
     )
 
 
-@pytest.mark.skipif(not _have_make(), reason="`make` not on PATH")
-def test_makefile_phony_targets_declared() -> None:
-    """All recipe-only targets we care about should be declared .PHONY.
-
-    Forgetting `.PHONY` is a subtle bug — a stray file/dir named the
-    same as a target silently disables the recipe. We don't enumerate
-    every target; we spot-check the ones most likely to clash with
-    accidental directories.
-    """
-    text = MAKEFILE.read_text()
-    # Collect ALL .PHONY declarations across the file (the Makefile has one
-    # inside the AI-wrapper ifdef block and a second, larger one in the else
-    # branch; both together define the full phony set).
-    declared: set[str] = set()
-    phony_block: list[str] = []
-    in_block = False
-    for line in text.splitlines():
-        if line.startswith(".PHONY:"):
-            in_block = True
-            phony_block = [line[len(".PHONY:") :]]
-            continue
-        if in_block:
-            if line.endswith("\\") or line.startswith((" ", "\t")):
-                phony_block.append(line)
-                if not line.rstrip().endswith("\\"):
-                    # End of this block — harvest tokens then reset for next block.
-                    for chunk in phony_block:
-                        for tok in chunk.replace("\\", " ").split():
-                            declared.add(tok)
-                    phony_block = []
-                    in_block = False
-            else:
-                # Non-continuation, non-blank line ends the block.
-                for chunk in phony_block:
-                    for tok in chunk.replace("\\", " ").split():
-                        declared.add(tok)
-                phony_block = []
-                in_block = False
-    # Flush any trailing block (file ends while still in a block).
-    for chunk in phony_block:
-        for tok in chunk.replace("\\", " ").split():
-            declared.add(tok)
-
-    must_be_phony = {
+@pytest.mark.skipif(not _have_just(), reason="`just` not on PATH")
+def test_makefile_public_recipes_declared() -> None:
+    result = subprocess.run(
+        ["just", "--justfile", str(JUSTFILE), "--summary"],
+        capture_output=True,
+        text=True,
+        timeout=20,
+    )
+    assert result.returncode == 0, result.stderr
+    declared = set(result.stdout.split())
+    required = {
+        "build",
+        "openapi-export",
+        "format",
         "help",
         "setup",
-        "test",
-        "build",
-        "clean",
-        "ci",
-        "frontend-install",
-        "frontend-build",
-        "frontend-test",
-        "frontend-dev",
         "local-frontend-test",
-        "openapi-export",
-        "lint",
-        "format",
+        "ci",
+        "frontend-test",
         "run",
+        "frontend-dev",
+        "test",
+        "frontend-install",
+        "lint",
+        "frontend-build",
+        "clean",
     }
-    missing = must_be_phony - declared
-    assert not missing, f"targets missing from .PHONY: {sorted(missing)}"
+    assert not (required - declared), f"Public recipes missing: {sorted(required - declared)}"
 
 
 def test_local_frontend_test_uses_wrapper_script() -> None:
     """The local frontend test path must isolate test-time sibling resolution."""
     text = JUSTFILE.read_text(encoding="utf-8")
-    assert "local-frontend-test:" in text, "local-frontend-test target missing from Makefile."
+    assert "local-frontend-test:" in text, "local-frontend-test target missing from justfile."
     assert "./scripts/local-frontend-test.sh" in text, (
         "local-frontend-test must run the wrapper that installs pdomain-ui as file: for Vitest."
     )
@@ -213,9 +179,9 @@ def test_local_frontend_test_script_restores_link_overlay() -> None:
     )
 
 
-@pytest.mark.skipif(not _have_make(), reason="`make` not on PATH")
+@pytest.mark.skipif(not _have_just(), reason="`just` not on PATH")
 def test_ci_calls_pre_commit_check() -> None:
-    """`make ci` must invoke pre-commit-check so hooks run in CI."""
+    """`just ci` must invoke pre-commit-check so hooks run in CI."""
     result = subprocess.run(
         ["just", "--justfile", str(JUSTFILE), "--show", "ci"],
         capture_output=True,
@@ -224,7 +190,7 @@ def test_ci_calls_pre_commit_check() -> None:
     )
     assert result.returncode == 0, f"`just --show ci` failed (rc={result.returncode}):\n{result.stderr}"
     assert "pre-commit-check" in result.stdout, (
-        f"`make ci` does not call pre-commit-check (pre-commit run --all-files):\n{result.stdout}"
+        f"`just ci` does not call pre-commit-check (pre-commit run --all-files):\n{result.stdout}"
     )
     hook = subprocess.run(
         ["just", "--justfile", str(JUSTFILE), "--show", "pre-commit-check"],
@@ -236,9 +202,9 @@ def test_ci_calls_pre_commit_check() -> None:
     assert "pre-commit run --all-files" in hook.stdout, hook.stdout
 
 
-@pytest.mark.skipif(not _have_make(), reason="`make` not on PATH")
+@pytest.mark.skipif(not _have_just(), reason="`just` not on PATH")
 def test_ci_calls_openapi_export_before_frontend_build() -> None:
-    """`make ci` must call openapi-export before frontend-build."""
+    """`just ci` must call openapi-export before frontend-build."""
     result = subprocess.run(
         ["just", "--justfile", str(JUSTFILE), "--show", "ci"],
         capture_output=True,
@@ -263,9 +229,9 @@ def test_ci_calls_openapi_export_before_frontend_build() -> None:
     )
 
 
-@pytest.mark.skipif(not _have_make(), reason="`make` not on PATH")
+@pytest.mark.skipif(not _have_just(), reason="`just` not on PATH")
 def test_ci_runs_frontend_install_before_pre_commit_check() -> None:
-    """`make ci` must run frontend-install before pre-commit-check.
+    """`just ci` must run frontend-install before pre-commit-check.
 
     Issue #279: the frontend pre-commit hooks (frontend-tsc, frontend-eslint,
     frontend-prettier) invoke `npm run` / `npx`, which fail with
@@ -310,7 +276,7 @@ def test_makefile_mise_download_pins_version() -> None:
     # recipe lines must not use the mise.run shortlink.
     code_lines = "\n".join(line for line in text.splitlines() if not line.lstrip().startswith("#"))
     assert "https://mise.run" not in code_lines, (
-        "Makefile mise-download must not use the floating https://mise.run URL "
+        "justfile mise-download must not use the floating https://mise.run URL "
         "in executable lines — pin to a tagged GitHub release URL instead (F-017 Option B)"
     )
     # Must pin to a versioned GitHub release asset. Accept either a literal
@@ -322,7 +288,7 @@ def test_makefile_mise_download_pins_version() -> None:
         r"github\.com/jdx/mise/releases/download/\$\(MISE_INSTALLER_VERSION\)/install\.sh", text
     )
     assert pinned_literal or pinned_via_var, (
-        "Makefile mise-download must pin mise installer to a tagged "
+        "justfile mise-download must pin mise installer to a tagged "
         "github.com/jdx/mise/releases/download/<version>/install.sh URL (F-017). "
         "Use either a literal version or a MISE_INSTALLER_VERSION := vX.Y.Z variable."
     )

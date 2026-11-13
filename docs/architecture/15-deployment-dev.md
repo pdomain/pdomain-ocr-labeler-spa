@@ -127,26 +127,27 @@ on a first `npm run dev` before the server has started).
 ```sh
 git clone <repo>
 cd pdomain-ocr-labeler-spa
-make setup            # uv sync + npm install + pre-commit + playwright install
+just setup            # locked Python install, hooks, version refresh
+just frontend-install # frozen pnpm install via mise
+just setup-e2e        # install Playwright Chromium when needed
 ```
 
-`make setup` does:
+`just setup` does:
 
-- `uv sync` — Python deps + dev group.
-- `cd frontend && npm install`.
-- `pre-commit install`.
-- `playwright install chromium`.
+- `uv sync --locked --group dev` — install locked Python dependencies.
+- `install-hooks` — install pre-commit hooks for this checkout.
+- `refresh-version` — refresh the editable package version.
 
 ### 4.2 Two-terminal dev loop
 
 Terminal 1 (backend):
 ```sh
-make dev-backend    # uvicorn --reload --frontend-dev http://localhost:5173
+just dev    # uvicorn --reload --frontend-dev http://localhost:5173
 ```
 
 Terminal 2 (frontend):
 ```sh
-make dev-frontend   # vite dev server on :5173 with proxy to :8080
+just frontend-dev   # vite dev server on :5173 with proxy to :8080
 ```
 
 Browser to `http://localhost:5173`. HMR works for the frontend; uvicorn
@@ -155,23 +156,23 @@ reloads on Python changes.
 ### 4.3 One-terminal dev loop
 
 ```sh
-make dev            # Tmux split: backend left, frontend right
+just dev            # backend only; run just frontend-dev in a second terminal
 ```
 
-Optional convenience target.
+The backend and frontend use separate terminals.
 
 ### 4.4 OpenAPI sync
 
 After any backend wire-shape change:
 
 ```sh
-make openapi-export   # writes frontend/openapi.json + frontend/src/api/types.ts
+just openapi-export   # writes frontend/openapi.json + frontend/src/api/types.ts
 ```
 
 CI gate (closes pgdp-prep drift gap):
 
 ```yaml
-- run: make openapi-export
+- run: just openapi-export
 - run: git diff --exit-code frontend/src/api/types.ts
 ```
 
@@ -184,18 +185,22 @@ before merging".
 ### 4.5 Tests
 
 ```sh
-make test                # backend unit + integration + conformance
-make frontend-test       # vitest
-make e2e                 # build SPA, then Playwright
-make test-all            # all of the above
+just test                # excludes e2e/, slow, and integration markers
+just frontend-test       # vitest
+just e2e                 # build SPA, then Playwright
+just ci e2e              # full CI, then Playwright
 ```
 
 ### 4.6 Lint + format
 
 ```sh
-make lint                # ruff check + ruff format --check + eslint + tsc --noEmit
-make format              # ruff format + prettier write
-pre-commit run --all     # everything
+just lint                # Python lint fixes
+just lint-check          # read-only Python format and lint checks
+just format              # Python format only
+just frontend-lint       # ESLint fixes
+just frontend-format     # Prettier write
+just frontend-typecheck  # application and test TypeScript checks
+just pre-commit-check    # all configured pre-commit hooks
 ```
 
 ---
@@ -205,7 +210,7 @@ pre-commit run --all     # everything
 ### 5.1 Wheel
 
 ```sh
-make build               # frontend-build + uv build --wheel
+just build               # OpenAPI + frontend-build + uv build --sdist + uv build --wheel
 ```
 
 Produces `dist/pdomain_ocr_labeler_spa-<version>-py3-none-any.whl` containing
@@ -269,7 +274,7 @@ class SpaCheckHook(BuildHookInterface):
             return
         index = Path("src/pdomain_ocr_labeler_spa/static/index.html")
         if not index.exists():
-            raise RuntimeError("SPA bundle not found. Run `make frontend-build` first.")
+            raise RuntimeError("SPA bundle not found. Run `just frontend-build` first.")
 ```
 
 ### 5.3 Sdist
@@ -312,8 +317,8 @@ ENTRYPOINT ["pdomain-ocr-labeler-ui", "--host", "0.0.0.0", "--no-browser"]
 
 For local Docker dev:
 ```sh
-make docker-build        # docker build -t pdomain-ocr-labeler-spa .
-make docker-run          # docker run -p 8080:8080 -v ~/data:/data pdomain-ocr-labeler-spa
+just docker-build        # docker build -t pdomain-ocr-labeler-spa .
+just docker-run          # docker run -p 8080:8080 -v ~/data:/data pdomain-ocr-labeler-spa
 ```
 
 ---
@@ -322,7 +327,7 @@ make docker-run          # docker run -p 8080:8080 -v ~/data:/data pdomain-ocr-l
 
 Push and pull request CI runs in `.github/workflows/ci.yml`. Releases run in
 `.github/workflows/release.yml`, but only by workflow dispatch from the local
-`make release-patch`, `make release-minor`, or `make release-major` targets:
+`just release-patch`, `just release-minor`, or `just release-major` targets:
 
 | Job | Trigger | Required for green PR? |
 |---|---|---|
@@ -332,7 +337,7 @@ Push and pull request CI runs in `.github/workflows/ci.yml`. Releases run in
 | `test-e2e` | every push + PR | Yes |
 | `openapi-drift` | every push + PR | Yes |
 | `build-wheel` | every push + PR | Yes (asserts static/index.html in wheel) |
-| `release-ci` | workflow dispatch | No (reruns `make ci-slow` from the exact tag) |
+| `release-ci` | workflow dispatch | No (reruns `just ci-slow` from the exact tag) |
 | `publish` | workflow dispatch after `release-ci` | No (uploads one `dist/*.whl` asset to the GitHub Release and dispatches `pdomain-index-pip`) |
 
 `UV_PYTHON: "3.13"` is pinned because uv-discovered 3.14 has a known
@@ -376,7 +381,7 @@ repos:
       - id: openapi-drift
         name: OpenAPI types in sync
         language: system
-        entry: bash -c 'make openapi-export && git diff --exit-code frontend/src/api/types.ts'
+        entry: bash -c 'just openapi-export && git diff --exit-code frontend/src/api/types.ts'
         pass_filenames: false
         stages: [pre-push]
 ```
@@ -410,9 +415,9 @@ python = "3.13"
 ```
 
 Node is provided via mise per `mise.toml` (D-036; resolves Q-A8). The
-canonical bootstrap is `mise install` then `npm ci`. The `Makefile`'s
-`_npm` macro dispatches through `mise exec` when available and falls
-back to PATH otherwise (matches pgdp-prep `Makefile:104-135`), so a
+canonical bootstrap is `mise install` then `just frontend-install`
+for frozen pnpm dependencies. The `justfile`'s `_pnpm` helper dispatches through `mise exec` when available and falls
+back to PATH otherwise, so a
 developer with their own Node 24 on PATH also works — but the
 workspace-pinned default is mise.
 
@@ -420,19 +425,20 @@ workspace-pinned default is mise.
 
 ## 11. Devcontainer (optional, not required)
 
-D-028: the canonical onboarding is **`make setup`**. The workspace
+D-028: the canonical onboarding is **`just setup`**. The workspace
 devcontainer at `/workspaces/ocr-container/` is supported but
 **not required**. A developer with their own Python/Node environment
-can `make setup` and be productive without ever opening the devcontainer.
+can `just setup` and be productive without ever opening the devcontainer.
 
-`make setup` does:
+`just setup` does:
 
-- `uv sync` (Python deps + dev group).
-- `cd frontend && npm install`.
-- `pre-commit install`.
-- `playwright install chromium`.
+- `uv sync --locked --group dev` (Python dependencies).
+- Hook installation and editable-version refresh.
 
-If `mise` is installed, Make targets dispatch through `mise exec`
+Run `just frontend-install` for frozen pnpm dependencies and `just setup-e2e`
+when Playwright Chromium is needed.
+
+If `mise` is installed, frontend recipes dispatch through `mise exec`
 (pulling Node 24 / Python 3.13 from `mise.toml`); else they fall
 through to the developer's PATH. Document required versions
 prominently in `DEVELOPMENT.md` so PATH-only developers know what
@@ -453,31 +459,33 @@ boot. Plain text format with `[rid=...]` request-id tags.
 
 `--log-format json` switches to NDJSON for log aggregators.
 
-`make clean-logs` purges old logs (offset by 7 days).
+There is no log-cleanup recipe in the justfile.
 
 ---
 
-## 13. Make targets index
+## 13. Just recipe index
 
-```
-make setup           First-time dev setup
-make test            Backend pytest
-make frontend-test   Vitest
-make e2e             Playwright e2e (requires built SPA)
-make test-all        All of the above
-make lint            ruff + eslint + tsc
-make format          ruff format + prettier
-make dev-backend     uvicorn --reload --frontend-dev …
-make dev-frontend    vite dev
-make frontend-build  npm run build + cp to static/
-make build           Wheel build (with SPA)
-make openapi-export  Regenerate types.ts
-make docker-build    Build the runtime container
-make docker-run      Run the container locally
-make clean           Remove build artefacts
-make clean-logs      Remove old session logs
-make clean-cache     Remove image cache
-make release         Tag + push (manual; CI handles wheel/container)
+```sh
+just --list          # current recipe index
+just setup           # locked Python setup, hooks, version refresh
+just frontend-install # frozen frontend dependencies
+just test            # selected backend pytest suite
+just frontend-test   # Vitest
+just e2e             # Playwright
+just lint            # Python lint fixes
+just format          # Python format only
+just frontend-lint   # ESLint fixes
+just frontend-format # Prettier
+just frontend-typecheck # application and test TypeScript projects
+just dev             # backend with reload
+just frontend-dev    # Vite
+just frontend-build  # OpenAPI export, SPA build, copy to static/
+just build           # SPA, sdist, then wheel
+just openapi-export  # regenerate types.ts
+just docker-build    # runtime container
+just docker-run      # local container
+just clean           # build artifacts
+just release-patch   # manual release; also release-minor and release-major
 ```
 
 ---
@@ -598,7 +606,7 @@ External hooks use full 40-character commit SHAs with a `# frozen: <tag>`
 comment. The local `require-frozen-hook-revs` check rejects revisions that do
 not match that form.
 
-Run `make update-hooks` to update hooks to their latest releases. It runs
+Run `just update-hooks` to update hooks to their latest releases. It runs
 `uv run pre-commit autoupdate --freeze` and preserves failures instead of
 ignoring them. Review the resulting configuration diff and upstream release
 notes. The former pre-commit-update bumper was removed because it rewrote
@@ -609,7 +617,7 @@ whose version string it cannot parse. Bump that Node pin deliberately.
 
 ### Configuration and verification evidence
 
-- Configuration: `.pre-commit-config.yaml`; update command: `Makefile`'s
+- Configuration: `.pre-commit-config.yaml`; update command: `justfile`'s
   `update-hooks` target.
 - Verification on 2026-11-07: the frozen-revision hook passes on SHA pins.
   It fails when one revision is temporarily changed back to its tag. It passes

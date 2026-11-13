@@ -6,7 +6,7 @@
 # `pnpm link <sibling>` for each NPM_SIBLINGS entry so the overlay
 # survives the install. Idempotent.
 #
-# Requires local-dev mode marker — call `make local-dev` first if absent.
+# Requires local-dev mode marker — call `just local-dev` first if absent.
 set -euo pipefail
 
 # uv installs into UV_PROJECT_ENVIRONMENT when that is set and into .venv
@@ -34,7 +34,7 @@ MARKER="$PROJECT_VENV/.pdomain-local-mode"
 say() { echo "[local-frontend-install] $*"; }
 
 if [[ ! -f "$MARKER" ]]; then
-  echo "ERROR: not in local-dev mode. Run 'make local-dev' first." >&2
+  echo "ERROR: not in local-dev mode. Run 'just local-dev' first." >&2
   exit 1
 fi
 
@@ -51,7 +51,7 @@ run_pnpm() {
   elif command -v pnpm >/dev/null 2>&1; then
     (cd "$REPO_ROOT/frontend" && pnpm "$@")
   else
-    echo "no pnpm/mise available. Run 'make mise-setup' or install Node." >&2
+    echo "no pnpm/mise available. Run 'just mise-setup' or install Node." >&2
     exit 1
   fi
 }
@@ -85,13 +85,13 @@ fi
 # resolutions in favor of registry, so we re-link after every install.
 for s in "${NPM_SIBLINGS[@]}"; do
   if [[ ! -d "$WORKSPACE_ROOT/$s" ]]; then
-    say "sibling missing: $WORKSPACE_ROOT/$s (run 'make local-setup'); skipping"
+    say "sibling missing: $WORKSPACE_ROOT/$s (run 'just local-setup'); skipping"
     continue
   fi
-  # pdomain-ui ships from dist/, which needs `make build` to populate.
+  # pdomain-ui ships from dist/, which needs `just build` to populate.
   if [[ "$s" == "pdomain-ui" ]]; then
     say "-> pre-building $s dist/"
-    (cd "$WORKSPACE_ROOT/$s" && make build)
+    (cd "$WORKSPACE_ROOT/$s" && just build)
   fi
   say "-> linking @pdomain/$s from $WORKSPACE_ROOT/$s"
   run_pnpm link "$WORKSPACE_ROOT/$s"

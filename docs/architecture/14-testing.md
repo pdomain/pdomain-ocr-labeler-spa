@@ -269,7 +269,7 @@ def page(browser_instance, server_url):
     ctx.close()
 ```
 
-Pre-built SPA assumed (`make e2e` does this).
+Pre-built SPA assumed (`just e2e` does this).
 
 ### 4.2 Helper layer
 
@@ -376,7 +376,7 @@ jobs:
     - uv build --wheel
     - python -m zipfile -l ... | grep static/index.html  # SPA assertion
   openapi-drift:
-    - make openapi-export
+    - just openapi-export
     - git diff --exit-code frontend/src/api/types.ts
 ```
 
@@ -421,13 +421,14 @@ for attached nodes and fail on an unexpectedly empty tree. Unmatched ground-trut
 overlays; successful zero-word OCR stays distinguishable from a reviewed blank page. Keyboard registration and
 platform data-root behavior are recorded in the feature architecture and decision log.
 
-The test TypeScript project matches the app project and sets `noUncheckedIndexedAccess: true`. `make lint` runs
-`pnpm run typecheck:test`, which is `tsc -p tsconfig.test.json --noEmit`. Vitest does not type-check, so that command
+The test TypeScript project matches the app project and sets `noUncheckedIndexedAccess: true`.
+`just frontend-typecheck` runs both application and test checks, including
+`tsc -p tsconfig.test.json --noEmit`. Vitest does not type-check, so that command
 is the only check on test types.
 
 ### Evidence
 
-- Code: `Makefile`, `frontend/tsconfig.test.json`, and `frontend/src/components/PageImageCanvas.tsx`.
+- Code: `justfile`, `frontend/tsconfig.test.json`, and `frontend/src/components/PageImageCanvas.tsx`.
 - Tests: `tests/e2e/test_ui_coverage.py`, `tests/e2e/test_confirm_dialog_keyboard.py`, and
   `tests/unit/test_settings.py`.
 - Verified: 2026-11-07 by source inspection and September decision records. These statements do not claim a new

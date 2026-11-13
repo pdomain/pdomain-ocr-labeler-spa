@@ -5,7 +5,7 @@ Mirrors ``pdomain-prep-for-pgdp/tests/e2e/conftest.py``:
 - ``live_server`` builds + serves the SPA and FastAPI together on a free
   port, yields the base URL and settings, and tears the server down at
   session end.
-- Pre-built SPA is assumed (``make e2e`` runs ``make frontend-build`` first).
+- Pre-built SPA is assumed (``just e2e`` runs ``just frontend-build`` first).
 
 Per-test isolation comes from ``data_root`` being a tmp directory unique
 to the session; we do not reset between tests in a single session.
@@ -173,7 +173,7 @@ def pytest_configure(config: pytest.Config) -> None:
 
     Headless chromium needs no X server at all, so drop ``DISPLAY`` entirely
     unless the developer explicitly asked for a headed browser (e.g.
-    ``make exercise-real HEADED=1``).  Runs in each xdist worker too (workers
+    ``HEADED=1 just exercise-real``).  Runs in each xdist worker too (workers
     re-import conftest and re-run configure), so the browser subprocess can
     never inherit the variable.
     """
@@ -185,7 +185,7 @@ def pytest_configure(config: pytest.Config) -> None:
 # P0-CI-SOFT skip-budget gate
 # ---------------------------------------------------------------------------
 #
-# docs/issues/2026-07-21-e2e-non-blocking-soft-skips.md: `make e2e` must not
+# docs/issues/2026-07-21-e2e-non-blocking-soft-skips.md: `just e2e` must not
 # report success while a test soft-skips past a condition it should have
 # exercised. Every remaining ``pytest.skip`` reason in tests/e2e/ is listed
 # here, each with why it is a legitimate environment- or fixture-state
@@ -201,7 +201,7 @@ def pytest_configure(config: pytest.Config) -> None:
 # would be pure repetition. The allowlist is the single place that answers
 # "is this skip still expected" for the whole tier.
 _ALLOWED_SKIP_PREFIXES = (
-    # SPA build is a precondition `make e2e` always satisfies (frontend-build
+    # SPA build is a precondition `just e2e` always satisfies (frontend-build
     # runs first); this only fires for a bare `pytest tests/e2e` without it.
     "SPA not built",
     # exercise_server's fixture-data precondition — the committed exercise-
@@ -213,7 +213,7 @@ _ALLOWED_SKIP_PREFIXES = (
     "tiny-fixture project not available",
     "Failed to load tiny-fixture",
     # test_ocr_reload_words.py intentionally targets a manually-run dev
-    # server on :8080, never the isolated server `make e2e` starts.
+    # server on :8080, never the isolated server `just e2e` starts.
     "Dev server not reachable",
     "Server at http://localhost:8080",
     "Could not enumerate projects",
@@ -245,10 +245,10 @@ def _skip_budget_exempt_file(nodeid: str) -> bool:
     """Return True when ``nodeid`` is out of scope for the skip-budget gate.
 
     ``pytest_sessionfinish`` below runs for *every* pytest session that loads
-    this conftest, not just ``make e2e`` — including ``make exercise-real``
+    this conftest, not just ``just e2e`` — including ``just exercise-real``
     (``pytest tests/e2e/exercise_real_project.py``). That module is a
     manual/exploratory workflow harness, not the automated regression gate
-    `make e2e` guards — its own docstring says it is "intentionally not a
+    `just e2e` guards — its own docstring says it is "intentionally not a
     unit-by-unit pass/fail matrix." Its ~90 CU-2.2 placeholder stubs
     (``@pytest.mark.skip("TODO: walk in browser — CU-2.2")``) are pre-existing,
     already-tracked debt (docs/issues/2026-07-21-e2e-non-blocking-soft-skips.md
@@ -296,7 +296,7 @@ def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> None:
         reporter.write_line("")
         reporter.write_line(
             f"P0-CI-SOFT: {len(unexpected)} e2e test(s) skipped for a reason not in "
-            "conftest._ALLOWED_SKIP_PREFIXES — this is now a hard failure so `make e2e` "
+            "conftest._ALLOWED_SKIP_PREFIXES — this is now a hard failure so `just e2e` "
             "cannot report success while masking a gap. Either fix the underlying "
             "precondition or add the reason to _ALLOWED_SKIP_PREFIXES with justification.",
             red=True,
@@ -324,7 +324,7 @@ def _pick_free_port() -> int:
 def _spa_built() -> bool:
     """Return True if the SPA static bundle exists.
 
-    ``make e2e`` runs ``frontend-build`` first; this is the safety net
+    ``just e2e`` runs ``frontend-build`` first; this is the safety net
     that prints a clear skip message instead of a cryptic 404.
     """
     static = Path(__file__).resolve().parents[2] / "src" / "pdomain_ocr_labeler_spa" / "static"
@@ -369,10 +369,10 @@ def live_server(tmp_path_factory: pytest.TempPathFactory) -> Iterator[LiveServer
     """Start a live uvicorn + FastAPI server for the session.
 
     Skips the test session when the SPA bundle is not present; run
-    ``make frontend-build`` (or ``make e2e``) first.
+    ``just frontend-build`` (or ``just e2e``) first.
     """
     if not _spa_built():
-        pytest.skip("SPA not built — run `make frontend-build` (or `make e2e`) before E2E tests")
+        pytest.skip("SPA not built — run `just frontend-build` (or `just e2e`) before E2E tests")
 
     data_root = tmp_path_factory.mktemp("e2e-data")
     cache_root = tmp_path_factory.mktemp("e2e-cache")

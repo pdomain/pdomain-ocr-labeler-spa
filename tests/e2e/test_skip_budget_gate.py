@@ -1,7 +1,7 @@
 """Unit tests for the P0-CI-SOFT skip-budget gate in ``conftest.py``.
 
 Pure logic — no ``live_server``/browser fixtures needed. Runs under both
-``make e2e`` (harmlessly; nothing here skips) and ``make exercise-real``.
+``just e2e`` (harmlessly; nothing here skips) and ``just exercise-real``.
 
 Spec: docs/issues/2026-07-21-e2e-non-blocking-soft-skips.md
 """
@@ -12,12 +12,12 @@ from tests.e2e.conftest import _ALLOWED_SKIP_PREFIXES, _skip_budget_exempt_file
 
 
 def test_exercise_real_project_file_is_exempt() -> None:
-    """``make exercise-real`` (pytest tests/e2e/exercise_real_project.py) must
-    not be caught by the skip-budget gate meant for ``make e2e``.
+    """``just exercise-real`` (pytest tests/e2e/exercise_real_project.py) must
+    not be caught by the skip-budget gate meant for ``just e2e``.
 
     That module's ~90 CU-2.2 placeholder stubs
     (``@pytest.mark.skip("TODO: walk in browser — CU-2.2")``) are pre-existing,
-    already-tracked debt, not a new soft-skip `make e2e` should fail on.
+    already-tracked debt, not a new soft-skip `just e2e` should fail on.
     """
     nodeid = "tests/e2e/exercise_real_project.py::test_phase_1_1_something[chromium]"
     assert _skip_budget_exempt_file(nodeid)

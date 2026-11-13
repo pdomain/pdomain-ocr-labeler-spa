@@ -1,7 +1,7 @@
 """Docker build and runtime integration tests.
 
 Verifies the acceptance criteria for issue #252:
-- `make docker-build` produces a running image
+- `just docker-build` produces a running image
 - `docker run -p 8080:8080 pdomain-ocr-labeler-spa` serves SPA at `/`
 - `/healthz` returns 200 from the container
 - Image does not include build tools or node_modules in the runtime stage
@@ -17,6 +17,7 @@ from pathlib import Path
 import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
+JUSTFILE = REPO_ROOT / "justfile"
 DOCKER_IMAGE = "pdomain-ocr-labeler-spa:dev"
 
 
@@ -25,26 +26,26 @@ def _have_docker() -> bool:
     return shutil.which("docker") is not None
 
 
-def _have_make() -> bool:
-    """Check if make is available."""
-    return shutil.which("make") is not None
+def _have_just() -> bool:
+    """Check if just is available."""
+    return shutil.which("just") is not None
 
 
 def _have_pnpm() -> bool:
-    """Check if pnpm is available (needed for make docker-build → frontend-build)."""
+    """Check if pnpm is available (needed for just docker-build → frontend-build)."""
     return shutil.which("pnpm") is not None
 
 
-def _run_make_docker_build() -> None:
-    """Run `make docker-build` to build the image."""
+def _run_just_docker_build() -> None:
+    """Run `just docker-build` to build the image."""
     result = subprocess.run(
-        ["make", "-C", str(REPO_ROOT), "docker-build"],
+        ["just", "--justfile", str(JUSTFILE), "docker-build"],
         capture_output=True,
         text=True,
         timeout=600,  # 10 minutes for docker build
     )
     assert result.returncode == 0, (
-        f"`make docker-build` failed (rc={result.returncode}):\n"
+        f"`just docker-build` failed (rc={result.returncode}):\n"
         f"stdout:\n{result.stdout}\nstderr:\n{result.stderr}"
     )
 
@@ -124,20 +125,20 @@ def _check_spa_served(port: int = 8080) -> bool:
     return "<html" in result.stdout.lower() or "<body" in result.stdout.lower()
 
 
-@pytest.mark.skipif(not _have_make(), reason="`make` not on PATH")
+@pytest.mark.skipif(not _have_just(), reason="`just` not on PATH")
 @pytest.mark.skipif(not _have_docker(), reason="docker not on PATH")
-@pytest.mark.skipif(not _have_pnpm(), reason="pnpm not on PATH (needed by make docker-build)")
+@pytest.mark.skipif(not _have_pnpm(), reason="pnpm not on PATH (needed by just docker-build)")
 class TestDockerBuild:
-    """Tests for `make docker-build` producing a running image."""
+    """Tests for `just docker-build` producing a running image."""
 
     def test_make_docker_build_produces_running_image(self) -> None:
-        """Verify `make docker-build` produces a running image."""
-        _run_make_docker_build()
+        """Verify `just docker-build` produces a running image."""
+        _run_just_docker_build()
         assert _image_exists(DOCKER_IMAGE), f"Image {DOCKER_IMAGE} not found after build"
 
     def test_docker_run_serves_spa_at_root(self) -> None:
         """Verify `docker run -p 8080:8080 pdomain-ocr-labeler-spa` serves SPA at `/`."""
-        _run_make_docker_build()
+        _run_just_docker_build()
 
         # Start container and verify SPA is served
         container_id = None
@@ -170,14 +171,14 @@ class TestDockerBuild:
 
     def test_healthz_returns_200(self) -> None:
         """Verify `/healthz` returns 200 from the container."""
-        _run_make_docker_build()
+        _run_just_docker_build()
 
         healthz_ok = _run_container_and_check_healthz(DOCKER_IMAGE, port=8080, timeout=30)
         assert healthz_ok, "Container /healthz endpoint not returning 200"
 
     def test_runtime_image_excludes_build_tools_and_node_modules(self) -> None:
         """Verify image does not include build tools or node_modules in the runtime stage."""
-        _run_make_docker_build()
+        _run_just_docker_build()
 
         # The runtime stage should not have layers from the spa stage
         # (spa stage is node:24, runtime stage is python:3.13-slim)

@@ -7,7 +7,7 @@ Covers:
 - "Send to trainer" button is absent (DOM count == 0) when trainer is not
   in the suite registry.
 
-Prerequisite: ``make frontend-build`` (or ``make e2e``) must have run.
+Prerequisite: ``just frontend-build`` (or ``just e2e``) must have run.
 
 Run with:
     uv run --group e2e pytest tests/e2e/test_export_manifest_and_trainer.py \

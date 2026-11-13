@@ -4,7 +4,7 @@ backend port, not a phantom one.
 Background: iter-5 review (B-02) found the dev proxy targeting :8765
 while every spec + the ``Settings.port`` default agree on :8080. This
 test pins the proxy structure so a future copy-paste regression surfaces
-in CI rather than the first time a contributor runs ``make frontend-dev``.
+in CI rather than the first time a contributor runs ``just frontend-dev``.
 
 Issue #323: the proxy target is now dynamic — ``vite.config.ts`` reads
 ``.pdlabeler-port`` (written on every server start) and falls back to

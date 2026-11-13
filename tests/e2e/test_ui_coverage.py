@@ -37,7 +37,7 @@ CHARFIX-1: char-fixer-section in DOM after word selection (right panel)
 Spec: docs/architecture/13-driver-contract.md §2 (testid catalogue).
 
 Run:
-    make e2e
+    just e2e
     # or:
     uv run --group e2e pytest tests/e2e/test_ui_coverage.py -v
 """

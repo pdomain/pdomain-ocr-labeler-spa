@@ -108,7 +108,7 @@ Major groups:
 | File | Role |
 |------|------|
 | `ApiClient.ts` | Typed HTTP client wrapping `fetch`; all backend calls go here |
-| `types.ts` | **Generated** from `make openapi-export` — 6,130 lines; never hand-edit |
+| `types.ts` | **Generated** from `just openapi-export` — 6,130 lines; never hand-edit |
 
 ### `stores/` — Zustand stores
 
@@ -187,8 +187,8 @@ Evidence:
 
 | Path | How produced | Notes |
 |------|-------------|-------|
-| `frontend/src/api/types.ts` | `make openapi-export` | Never hand-edit; CI gates on no drift |
-| `frontend/openapi.json` | `make openapi-export` | Intermediate schema written for `openapi-typescript`. Gitignored. The committed artifact is `frontend/src/api/types.ts`. |
-| `frontend/dist/` | `make frontend-build` | Copied to `src/pdomain_ocr_labeler_spa/static/` |
-| `src/pdomain_ocr_labeler_spa/static/` | `make frontend-build` | Bundled into wheel as package resources |
+| `frontend/src/api/types.ts` | `just openapi-export` | Never hand-edit; CI gates on no drift |
+| `frontend/openapi.json` | `just openapi-export` | Intermediate schema written for `openapi-typescript`. Gitignored. The committed artifact is `frontend/src/api/types.ts`. |
+| `frontend/dist/` | `just frontend-build` | Copied to `src/pdomain_ocr_labeler_spa/static/` |
+| `src/pdomain_ocr_labeler_spa/static/` | `just frontend-build` | Bundled into wheel as package resources |
 | `dist/*.whl` | `uv build --wheel` | Includes bundled SPA; `build_hooks/spa_check.py` refuses if `static/` is empty |

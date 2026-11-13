@@ -9,7 +9,7 @@ the install fresh so `__version__` doesn't drift across iterations
 What this module guards is the *resolution path*: `__init__.py` must
 read from `importlib.metadata.version("pdomain-ocr-labeler-spa")` (with a
 `PackageNotFoundError` fallback) — never a hard-coded string. Drift
-back to a literal would silently survive `make refresh-version`, since
+back to a literal would silently survive `just refresh-version`, since
 the literal wouldn't be recomputed at all.
 """
 

@@ -107,7 +107,7 @@ def test_main_prints_device_line_before_listening(
 ) -> None:
     """``main()`` must print the resolved torch device on a separate line.
 
-    Operators running ``make run`` need to know whether torch picked up
+    Operators running ``just run`` need to know whether torch picked up
     the GPU before the OCR pipeline starts pulling models — printing a
     one-liner from ``core.device_info.describe_device()`` at startup is
     the cheapest signal. Order is: device line, then "Listening on …",

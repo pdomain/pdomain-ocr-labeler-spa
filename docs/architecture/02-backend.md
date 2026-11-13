@@ -76,7 +76,7 @@ src/pdomain_ocr_labeler_spa/
 │   │   └── model_selection.py
 │   ├── pgdp_normalize.py   # PGDPResults wrapper
 │   └── logging_config.py
-└── static/                 # populated by `make frontend-build` (.gitignored)
+└── static/                 # populated by `just frontend-build` (.gitignored)
 ```
 
 Where this differs from pgdp-prep:
@@ -616,7 +616,7 @@ Per-route audit log (closes pgdp-prep gap):
 (We deliberately do NOT use `StaticFiles(directory=path, html=True)`:
 it has no reserved-prefix carve-out, no `Cache-Control: no-store` on
 `index.html`, and its missing-dir behaviour is a `RuntimeError` at
-mount time rather than a graceful 404 with a "run `make
+mount time rather than a graceful 404 with a "run `just
 frontend-build`" hint.)
 
 Image cache: served via `IStorage` adapter (D-019) at

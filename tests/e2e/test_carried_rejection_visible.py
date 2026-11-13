@@ -165,7 +165,7 @@ class CarriedRejectionServer:
 @pytest.fixture(scope="module")
 def carried_rejection_server(tmp_path_factory: pytest.TempPathFactory) -> Iterator[CarriedRejectionServer]:
     if not _spa_built():
-        pytest.skip("SPA not built — run `make frontend-build` (or `make e2e`) first")
+        pytest.skip("SPA not built — run `just frontend-build` (or `just e2e`) first")
 
     data_root = tmp_path_factory.mktemp("carried-rejection-data")
     cache_root = tmp_path_factory.mktemp("carried-rejection-cache")

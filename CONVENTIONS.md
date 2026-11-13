@@ -79,7 +79,7 @@ all encodings. `# noqa: RUF00x` masks the problem instead of fixing it.
 
 **The rule.** Invoke Python, pytest, ruff, mypy/pyright, and any project-local
 CLI through `uv run`. Never call bare `python`, `python3`, `pytest`, or
-`pre-commit` from a Makefile target, CI step, or hook.
+`pre-commit` from a justfile target, CI step, or hook.
 
 **Why.** Direct invocation skips the project's `.venv` and the lockfile-pinned
 toolchain; tests pass locally and fail in CI (or vice versa) because the bare
@@ -88,7 +88,7 @@ fast (<200 ms warm) and always selects the project venv.
 
 **Common high-confidence violations** (bot auto-fix candidates)
 
-- `python -m pytest` or `python3 script.py` in any `Makefile`, `*.sh`,
+- `python -m pytest` or `python3 script.py` in any `justfile`, `*.sh`,
   `.github/workflows/*.yml`, or `.pre-commit-config.yaml` hook.
 - `pre-commit run` (bare) instead of `uv run pre-commit run` in CI or scripts.
 - `ruff check` or `pyright` (bare) in scripts that don't activate a venv first.
@@ -170,7 +170,7 @@ this is how it gets justified.
 ## Rule: OpenAPI types are generated, never hand-edited
 
 **The rule.** `frontend/src/api/types.ts` is machine-generated from the
-FastAPI OpenAPI schema. Run `make openapi-export` to regenerate it after
+FastAPI OpenAPI schema. Run `just openapi-export` to regenerate it after
 any change to a FastAPI request or response model. Never edit
 `types.ts` by hand.
 
@@ -183,7 +183,7 @@ contract; the file is its artifact.
 - A commit that modifies a `src/pdomain_ocr_labeler_spa/api/` model but does not
   include a matching change to `frontend/src/api/types.ts`.
 - A PR description that says "updated response model" without mentioning
-  `make openapi-export`.
+  `just openapi-export`.
 
 **Common judgment-call violations** (bot flags, CT decides)
 
@@ -228,7 +228,7 @@ Pydantic model. Returning `dict`, `Any`, or `JSONResponse` without a
 model is not permitted.
 
 **Why.** Without a `response_model`, FastAPI cannot validate the outgoing
-shape, `make openapi-export` generates an untyped schema, and the
+shape, `just openapi-export` generates an untyped schema, and the
 generated `types.ts` degrades to `unknown`. The entire typed-REST surface
 depends on this discipline.
 

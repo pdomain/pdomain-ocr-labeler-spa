@@ -14,7 +14,7 @@ through its own freshly seeded, function-scoped server. Word merge is a
 destructive structural mutation, so this test does not share the
 module-scoped ``sel_server`` (mirrors that module's own ``mut_server``).
 
-Run with:   make e2e AI=1
+Run with:   AI=1 just e2e
 Or inline:  uv run --group e2e pytest tests/e2e/test_word_merge.py -v
 """
 

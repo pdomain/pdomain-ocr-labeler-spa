@@ -26,7 +26,7 @@ Follows the self-contained fixture-server pattern in
 response-waiting pattern in ``test_keyboard_only.py`` — every assertion waits
 on the real HTTP response Playwright observes, never a fixed sleep.
 
-Run with:   make e2e AI=1
+Run with:   AI=1 just e2e
 Or inline:  uv run --group e2e pytest tests/e2e/test_matches_pane_gt_commit.py -v
 """
 
@@ -206,7 +206,7 @@ class GtCommitServer:
 @pytest.fixture(scope="module")
 def gt_commit_server(tmp_path_factory: pytest.TempPathFactory) -> Iterator[GtCommitServer]:
     if not _spa_built():
-        pytest.skip("SPA not built — run `make frontend-build` (or `make e2e`) first")
+        pytest.skip("SPA not built — run `just frontend-build` (or `just e2e`) first")
 
     data_root = tmp_path_factory.mktemp("gt-commit-data")
     cache_root = tmp_path_factory.mktemp("gt-commit-cache")

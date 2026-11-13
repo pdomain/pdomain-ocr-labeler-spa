@@ -99,7 +99,7 @@ export function useReboxWord(projectId: string, pageIndex: number) {
  * (`mode: "expand_then_refine"`), or only expands by `paddingPx`
  * (`mode: "expand_only"`). Returns the generated `RefineJobResponse`
  * (`{ job_id }`) rather than a hand-written duplicate of that shape, so a
- * server-side contract change is caught by `make openapi-export`
+ * server-side contract change is caught by `just openapi-export`
  * regenerating `api/types.ts`, not silently missed here. The caller tracks
  * completion via `useJobProgress` and invalidates the page query itself
  * (this hook does not — the 202 response precedes any actual bbox change).

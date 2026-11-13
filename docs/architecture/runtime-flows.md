@@ -166,4 +166,4 @@ Browser at :5173
   └─ API calls → Vite proxy → FastAPI backend
 ```
 
-Run with `make dev` (uvicorn --reload) in terminal 1 and `make frontend-dev` (Vite) in terminal 2.
+Run with `just dev` (uvicorn --reload) in terminal 1 and `just frontend-dev` (Vite) in terminal 2.

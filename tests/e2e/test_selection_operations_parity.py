@@ -247,7 +247,7 @@ def _sel_server_ctx(tmp_path_factory: pytest.TempPathFactory, label: str) -> Ite
     Skips when the SPA bundle is absent.
     """
     if not _spa_built():
-        pytest.skip("SPA not built — run `make frontend-build` (or `make e2e`) first")
+        pytest.skip("SPA not built — run `just frontend-build` (or `just e2e`) first")
 
     data_root = tmp_path_factory.mktemp(f"{label}-data")
     cache_root = tmp_path_factory.mktemp(f"{label}-cache")

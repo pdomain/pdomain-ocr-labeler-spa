@@ -104,18 +104,18 @@ upgrade-deps:
     if [[ -n "${AI:-}" ]]; then exec just --quiet _ai upgrade-deps; fi
     if uv pip show pdomain-book-tools 2>/dev/null | grep -q "Editable project location"; then \
         echo "upgrade-deps refused: editable pdomain-book-tools detected (probe 1)."; \
-        echo "  'make upgrade-deps' would silently revert it to the pinned release."; \
-        echo "  Use 'make upgrade-deps-local' to upgrade and re-install editable."; \
+        echo "  'just upgrade-deps' would silently revert it to the pinned release."; \
+        echo "  Use 'just upgrade-deps-local' to upgrade and re-install editable."; \
         exit 1; \
     fi
     if [ -f "${UV_PROJECT_ENVIRONMENT:-.venv}"/.pdomain-dev-local ] || [ -f "${UV_PROJECT_ENVIRONMENT:-.venv}"/.pdomain-local-mode ]; then \
         echo "upgrade-deps refused: "${UV_PROJECT_ENVIRONMENT:-.venv}"/.pdomain-dev-local marker present (probe 2)."; \
-        echo "  Use 'make upgrade-deps-local' to upgrade and preserve dev-local state."; \
+        echo "  Use 'just upgrade-deps-local' to upgrade and preserve dev-local state."; \
         exit 1; \
     fi
     if [ "${PDOMAIN_DEV_LOCAL:-0}" = "1" ]; then \
         echo "upgrade-deps refused: PDOMAIN_DEV_LOCAL=1 in environment (probe 3)."; \
-        echo "  Use 'make upgrade-deps-local' to upgrade and preserve dev-local state."; \
+        echo "  Use 'just upgrade-deps-local' to upgrade and preserve dev-local state."; \
         exit 1; \
     fi
     echo "Upgrading dependency lockfile..."
@@ -129,7 +129,7 @@ upgrade-deps-local:
     #!/usr/bin/env bash
     set -euo pipefail
     if [[ -n "${AI:-}" ]]; then exec just --quiet _ai upgrade-deps-local; fi
-    echo "DEPRECATED: use 'make local-upgrade-deps' (canonical local-dev target)." >&2
+    echo "DEPRECATED: use 'just local-upgrade-deps' (canonical local-dev target)." >&2
     just --quiet local-upgrade-deps
 
 local-setup:
@@ -202,7 +202,7 @@ upgrade-pdomain-book-tools:
     #!/usr/bin/env bash
     set -euo pipefail
     if [[ -n "${AI:-}" ]]; then exec just --quiet _ai upgrade-pdomain-book-tools; fi
-    echo "warning: 'upgrade-pdomain-book-tools' is deprecated; use 'make update-pdomain-deps'"
+    echo "warning: 'upgrade-pdomain-book-tools' is deprecated; use 'just update-pdomain-deps'"
     just --quiet update-pdomain-deps
 
 mise-download:
@@ -217,7 +217,7 @@ mise-download:
         curl -fsSL -o "$MISE_TMP" "https://github.com/jdx/mise/releases/download/v2026.5.15/install.sh" && \
         sh "$MISE_TMP" && \
         rm -f "$MISE_TMP"; \
-        echo "mise downloaded. Run 'make mise-setup' next to install pinned tools."; \
+        echo "mise downloaded. Run 'just mise-setup' next to install pinned tools."; \
     fi
 
 mise-trust-worktrees:
@@ -255,7 +255,7 @@ mise-doctor:
         echo "  found: "${MISE:-$(command -v mise || echo "$HOME/.local/bin/mise")}""; \
         "${MISE:-$(command -v mise || echo "$HOME/.local/bin/mise")}" current 2>/dev/null | sed 's/^/  /' || echo "  (no mise.toml resolved)"; \
     else \
-        echo "  not installed (run 'make mise-setup')"; \
+        echo "  not installed (run 'just mise-setup')"; \
     fi
     echo "-- PATH (your interactive shell) --"
     command -v node   >/dev/null 2>&1 && echo "  node:   $(node --version)"   || echo "  node:   not on PATH"

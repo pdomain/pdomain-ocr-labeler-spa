@@ -103,7 +103,7 @@ def _spa_built() -> bool:
 @pytest.fixture(scope="module")
 def history_server(tmp_path_factory: pytest.TempPathFactory) -> Iterator[LiveServer]:
     if not _spa_built():
-        pytest.skip("SPA not built — run `make frontend-build` (or `make e2e`) first")
+        pytest.skip("SPA not built — run `just frontend-build` (or `just e2e`) first")
 
     data_root = tmp_path_factory.mktemp("history-data")
     cache_root = tmp_path_factory.mktemp("history-cache")

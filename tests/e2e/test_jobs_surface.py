@@ -8,7 +8,7 @@ it is closed — the surface is rebuilt from ``GET /api/jobs`` (the source of
 truth), not from the per-dialog SSE subscription that used to be the only
 place a job's state was visible.
 
-Prerequisite: ``make frontend-build`` (or ``make e2e``) must have run.
+Prerequisite: ``just frontend-build`` (or ``just e2e``) must have run.
 
 Run with:
     uv run --group e2e pytest tests/e2e/test_jobs_surface.py \

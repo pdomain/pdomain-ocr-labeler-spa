@@ -11,7 +11,7 @@ to silently omit the gitignored static/ directory when building the wheel
 from the sdist in a non-git temp directory.
 
 The RELEASE BUILD PATH:
-  1. ``make build`` runs ``frontend-build`` (vite), then ``uv build --sdist``
+  1. ``just build`` runs ``frontend-build`` (vite), then ``uv build --sdist``
      and ``uv build --wheel`` (both from the git source tree).
   2. By default ``uv build`` (without explicit flags) builds the sdist from
      source and then builds the wheel *from the sdist* in a temporary non-git
@@ -38,7 +38,7 @@ PACKAGE_DIR = REPO_ROOT / "src" / "pdomain_ocr_labeler_spa"
 STATIC_SRC = PACKAGE_DIR / "static"
 
 # Minimum number of static assets expected in a full build.
-# A fresh ``make frontend-build`` produces 60+ files (index.html + assets).
+# A fresh ``just frontend-build`` produces 60+ files (index.html + assets).
 # Use a conservative floor so the assertion does not break on minor chunk
 # count changes, but large enough to catch a "zero files" or "one file only"
 # regression.
@@ -50,7 +50,7 @@ def _require_frontend(test_name: str) -> None:
     if not (STATIC_SRC / "index.html").exists():
         pytest.skip(
             f"{test_name}: static/index.html not present -- "
-            "run `make frontend-build` first. "
+            "run `just frontend-build` first. "
             "This test is skipped in pure-Python CI runs without a prior build step."
         )
 
@@ -134,7 +134,7 @@ def test_pyproject_global_artifacts_includes_static() -> None:
 
 
 def test_makefile_build_uses_explicit_sdist_and_wheel() -> None:
-    """The ``build`` Makefile target must build sdist and wheel separately from source.
+    """The ``build`` justfile target must build sdist and wheel separately from source.
 
     ``uv build`` (default, without explicit flags) builds the wheel *from the
     sdist* in a temporary non-git directory. If the sdist or wheel configuration
@@ -151,7 +151,7 @@ def test_makefile_build_uses_explicit_sdist_and_wheel() -> None:
     assert result.returncode == 0, result.stderr
     makefile = result.stdout
     assert "uv build --sdist" in makefile and "uv build --wheel" in makefile, (
-        "Makefile `build` target must run `uv build --sdist` and `uv build --wheel` "
+        "justfile `build` target must run `uv build --sdist` and `uv build --wheel` "
         "as separate explicit commands (not bare `uv build`). "
         "Bare `uv build` builds the wheel from the sdist in a temp non-git dir, "
         "which can silently drop the gitignored static/ even when `artifacts` is "
@@ -247,7 +247,7 @@ def test_wheel_from_sdist_contains_static(tmp_path: Path) -> None:
     This is the wheel-from-sdist path: extracts the sdist to a directory with
     no ``.git`` and builds the wheel from there. This faithfully reproduces what
     ``uv build`` (default) does internally, and what the CI runner would do if
-    ``make build`` used bare ``uv build`` instead of explicit ``--sdist`` /
+    ``just build`` used bare ``uv build`` instead of explicit ``--sdist`` /
     ``--wheel`` flags.
 
     Historical failure mode: wheel-only ``force-include`` passed locally but
@@ -306,7 +306,7 @@ def test_wheel_from_sdist_contains_static(tmp_path: Path) -> None:
         "This is the historical CI release failure mode. "
         f"Static files found: {count}. "
         "Fix: add `artifacts` to [tool.hatch.build] (global) AND use "
-        "`uv build --sdist` + `uv build --wheel` in the Makefile build target."
+        "`uv build --sdist` + `uv build --wheel` in the justfile build target."
     )
     assert count >= MIN_STATIC_FILE_COUNT, (
         f"Only {count} static files in the wheel-from-sdist "
@@ -320,7 +320,7 @@ def test_full_release_build_both_artifacts(tmp_path: Path) -> None:
     """The release build must produce a complete wheel and sdist (both with static files).
 
     Exercises the same sequence as the CI release workflow:
-    1. frontend already built (``make frontend-build`` prerequisite)
+    1. frontend already built (``just frontend-build`` prerequisite)
     2. ``uv build --sdist`` then ``uv build --wheel`` from source
 
     Both artifacts must contain the full frontend.
@@ -330,7 +330,7 @@ def test_full_release_build_both_artifacts(tmp_path: Path) -> None:
     out_dir = tmp_path / "release-out"
     out_dir.mkdir()
 
-    # Build sdist and wheel from source (same as updated make build target).
+    # Build sdist and wheel from source (same as updated just build target).
     for flag in ("--sdist", "--wheel"):
         result = subprocess.run(
             ["uv", "build", flag, "--out-dir", str(out_dir)],

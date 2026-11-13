@@ -7,7 +7,7 @@ Spec: docs/specs/2026-05-12-testing-design.md §E2E conftest
 Issue #247
 
 Run:
-    make e2e
+    just e2e
     # or
     uv run pytest tests/e2e/test_smoke.py -v
 """

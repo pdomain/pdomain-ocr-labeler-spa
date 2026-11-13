@@ -1,16 +1,16 @@
-"""Smoke tests for the Makefile's `docker-*` targets.
+"""Smoke tests for the justfile's `docker-*` targets.
 
 These targets are thin wrappers around `docker build` / `docker run`,
 so the value here is not in re-testing docker — it's in ensuring the
 three-way contract between Settings, Dockerfile EXPOSE, and the
-Makefile's `-p` flag stays consistent. A drift between any of them
+justfile's `-p` flag stays consistent. A drift between any of them
 would surface as a "the labeler runs but I can't reach it" bug, which
 is annoying enough to warrant a hard pin.
 
 Strategy: dry-run-render each docker target so we exercise the parser
 and variable expansion (mirroring `test_makefile.py`), then introspect
 `Settings().port` and grep the Dockerfile's `EXPOSE` line and the
-Makefile's `docker-run` recipe — all three must agree.
+justfile's `docker-run` recipe — all three must agree.
 """
 
 from __future__ import annotations
@@ -23,18 +23,16 @@ from pathlib import Path
 import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-MAKEFILE = REPO_ROOT / "Makefile"
 JUSTFILE = REPO_ROOT / "justfile"
 DOCKERFILE = REPO_ROOT / "Dockerfile"
 
 
-def _have_make() -> bool:
-    return shutil.which("make") is not None
+def _have_just() -> bool:
+    return shutil.which("just") is not None
 
 
 def _make_dry_run(target: str) -> subprocess.CompletedProcess[str]:
-    # Pass AI= to bypass the log-wrapper (AI ?= 1 is the Makefile default)
-    # so the rendered recipe appears on stdout rather than .ci-ai.log.
+    # --show prints the recipe without executing its AI wrapper.
     return subprocess.run(
         ["just", "--justfile", str(JUSTFILE), "--show", target],
         capture_output=True,
@@ -44,11 +42,11 @@ def _make_dry_run(target: str) -> subprocess.CompletedProcess[str]:
 
 
 # ---------------------------------------------------------------------------
-# Parse / dry-run — every target must render cleanly under `make -n`.
+# Parse / dry-run — every target must render cleanly under `just --show`.
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.skipif(not _have_make(), reason="`make` not on PATH")
+@pytest.mark.skipif(not _have_just(), reason="`just` not on PATH")
 @pytest.mark.parametrize("target", ["docker-build", "docker-run", "docker-shell"])
 def test_docker_target_dry_runs_cleanly(target: str) -> None:
     """`just --show <target>` must parse + render without error.
@@ -63,18 +61,18 @@ def test_docker_target_dry_runs_cleanly(target: str) -> None:
     )
 
 
-@pytest.mark.skipif(not _have_make(), reason="`make` not on PATH")
+@pytest.mark.skipif(not _have_just(), reason="`just` not on PATH")
 def test_docker_targets_appear_in_help() -> None:
-    """`make help` must list all three docker-* targets (each has `## …`)."""
+    """`just help` must list all three docker-* targets (each has `## …`)."""
     result = subprocess.run(
-        ["make", "-C", str(REPO_ROOT), "AI=", "help"],
+        ["just", "--justfile", str(JUSTFILE), "help"],
         capture_output=True,
         text=True,
         timeout=20,
     )
     assert result.returncode == 0
     for target in ("docker-build", "docker-run", "docker-shell"):
-        assert target in result.stdout, f"target '{target}' missing from `make help`"
+        assert target in result.stdout, f"target '{target}' missing from `just help`"
 
 
 # ---------------------------------------------------------------------------
@@ -82,14 +80,14 @@ def test_docker_targets_appear_in_help() -> None:
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.skipif(not _have_make(), reason="`make` not on PATH")
+@pytest.mark.skipif(not _have_just(), reason="`just` not on PATH")
 @pytest.mark.parametrize("target", ["docker-build", "docker-run", "docker-shell"])
 def test_docker_targets_use_default_image_tag(target: str) -> None:
     """All three targets must reference the same default image tag.
 
     The default is `pdomain-ocr-labeler-spa:dev` (matches pdomain-prep-for-pgdp's
     `pgdp-prep:dev` shape). Operators can override via
-    `make docker-build DOCKER_IMAGE=… DOCKER_TAG=…`, but the default
+    `DOCKER_IMAGE=… DOCKER_TAG=… just docker-build`, but the default
     must be stable so muscle-memory works.
     """
     result = _make_dry_run(target)
@@ -100,7 +98,7 @@ def test_docker_targets_use_default_image_tag(target: str) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Port-alignment three-way check (Settings ↔ Dockerfile EXPOSE ↔ Makefile -p).
+# Port-alignment three-way check (Settings ↔ Dockerfile EXPOSE ↔ justfile -p).
 # ---------------------------------------------------------------------------
 
 
@@ -127,11 +125,11 @@ def test_settings_port_matches_dockerfile_expose() -> None:
     )
 
 
-@pytest.mark.skipif(not _have_make(), reason="`make` not on PATH")
+@pytest.mark.skipif(not _have_just(), reason="`just` not on PATH")
 def test_docker_run_maps_settings_port_into_container() -> None:
-    """`make docker-run`'s `-p HOST:CONTAINER` flag must end with the
+    """`just docker-run`'s `-p HOST:CONTAINER` flag must end with the
     same container port the Dockerfile EXPOSEs (which equals
-    `Settings().port`). If the Makefile's container-side port drifts
+    `Settings().port`). If the justfile's container-side port drifts
     from EXPOSE, the host port maps to nothing.
     """
     from pdomain_ocr_labeler_spa.settings import Settings
@@ -141,13 +139,13 @@ def test_docker_run_maps_settings_port_into_container() -> None:
     assert result.returncode == 0
 
     # Find every `-p HOST:CONTAINER` token in the rendered recipe.
-    # Container side may be a literal int or a make-var expansion that
+    # Container side may be a literal int or a shell-variable expansion that
     # already got resolved by `-n`.
     matches = re.findall(r"-p\s+\S+:(\d+)\b", result.stdout)
     assert matches, f"`just --show docker-run` rendered no `-p HOST:CONTAINER` flag:\n{result.stdout}"
     for container_port in matches:
         assert int(container_port) == expected, (
-            f"`make docker-run` -p flag's container-side port {container_port} "
+            f"`just docker-run` -p flag's container-side port {container_port} "
             f"does not match Settings().port={expected}"
         )
 
@@ -164,17 +162,17 @@ def test_docker_run_maps_settings_port_into_container() -> None:
 
 
 def test_makefile_defines_docker_macro() -> None:
-    """B-24: the Makefile must define a `_docker` macro analogous to `_npm`.
+    """B-24: the justfile must define a `_docker` macro analogous to `_npm`.
 
-    Without it, `make docker-build` on a host that lacks docker fails
+    Without it, `just docker-build` on a host that lacks docker fails
     with bash's terse `make: docker: No such file or directory`. The
     macro adds a `command -v docker` preflight + a friendly options
     block (install Docker Desktop, Colima, devcontainer feature) so
-    the contributor experience matches `make frontend-build` without
+    the contributor experience matches `just frontend-build` without
     npm.
     """
     text = JUSTFILE.read_text()
-    assert "_docker +args:" in text, "Makefile must define a `_docker` macro (B-24)"
+    assert "_docker +args:" in text, "justfile must define a `_docker` macro (B-24)"
     # The macro must include the command-presence check.
     assert "command -v docker" in text, (
         "`_docker` macro must check for docker on PATH via `command -v docker`"
@@ -192,14 +190,14 @@ def test_docker_targets_invoke_docker_macro(target: str) -> None:
     """
     text = JUSTFILE.read_text()
     # Locate the recipe block for `target`. Each docker target is a
-    # single-recipe line in the current Makefile, so we just slice
+    # single-recipe line in the current justfile, so we just slice
     # between the target line and the next blank line.
     lines = text.splitlines()
     target_line = next(
         (i for i, ln in enumerate(lines) if ln.startswith(f"{target}:")),
         None,
     )
-    assert target_line is not None, f"target `{target}` not found in Makefile"
+    assert target_line is not None, f"target `{target}` not found in justfile"
     # Recipe lines are tab-indented; collect them until we hit a
     # non-tab non-blank line.
     recipe: list[str] = []
@@ -216,38 +214,14 @@ def test_docker_targets_invoke_docker_macro(target: str) -> None:
     )
 
 
-def test_docker_targets_are_phony() -> None:
-    text = MAKEFILE.read_text()
-    # Collect ALL .PHONY declarations across the file (the Makefile has one
-    # inside the AI-wrapper ifdef block and a second, larger one in the else
-    # branch; both together define the full phony set).
-    declared: set[str] = set()
-    phony_block: list[str] = []
-    in_block = False
-    for line in text.splitlines():
-        if line.startswith(".PHONY:"):
-            in_block = True
-            phony_block = [line[len(".PHONY:") :]]
-            continue
-        if in_block:
-            if line.endswith("\\") or line.startswith((" ", "\t")):
-                phony_block.append(line)
-                if not line.rstrip().endswith("\\"):
-                    for chunk in phony_block:
-                        for tok in chunk.replace("\\", " ").split():
-                            declared.add(tok)
-                    phony_block = []
-                    in_block = False
-            else:
-                for chunk in phony_block:
-                    for tok in chunk.replace("\\", " ").split():
-                        declared.add(tok)
-                phony_block = []
-                in_block = False
-    for chunk in phony_block:
-        for tok in chunk.replace("\\", " ").split():
-            declared.add(tok)
-
-    must_be_phony = {"docker-build", "docker-run", "docker-shell"}
-    missing = must_be_phony - declared
-    assert not missing, f"docker targets missing from .PHONY: {sorted(missing)}"
+def test_docker_recipes_are_public() -> None:
+    result = subprocess.run(
+        ["just", "--justfile", str(JUSTFILE), "--summary"],
+        capture_output=True,
+        text=True,
+        timeout=20,
+    )
+    assert result.returncode == 0, result.stderr
+    declared = set(result.stdout.split())
+    required = {"docker-run", "docker-shell", "docker-build"}
+    assert not (required - declared), f"Public recipes missing: {sorted(required - declared)}"

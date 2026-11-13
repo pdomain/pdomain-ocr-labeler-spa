@@ -24,5 +24,5 @@ means v2.1 compat is broken.
    `pd-ocr-labeler` or `pdomain-ocr-labeler-spa`, copy the `_NNN.json` file).
 2. Place it in this directory as `<project>_<NNN>.json`.
 3. Add a row to the provenance table above.
-4. Run `make test` — the new fixture is picked up automatically by the
+4. Run `just test` — the new fixture is picked up automatically by the
    parametrised test.

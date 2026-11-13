@@ -452,7 +452,7 @@ Evidence:
 ### `src/api/types.ts`
 
 Auto-generated from `frontend/openapi.json` via `openapi-typescript`.
-**Don't hand-edit.** CI gate: `make openapi-export` then
+**Don't hand-edit.** CI gate: `just openapi-export` then
 `git diff --exit-code` (closes pgdp-prep drift gap).
 
 Imports look like:
@@ -695,7 +695,7 @@ patch around it.
 
 ## 18. Build output
 
-`npm run build` →`frontend/dist/`. `make frontend-build` then copies
+`npm run build` →`frontend/dist/`. `just frontend-build` then copies
 `frontend/dist/.` → `src/pdomain_ocr_labeler_spa/static/` so the wheel
 `force-include` picks it up.
 

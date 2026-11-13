@@ -165,8 +165,8 @@ These files are **content-addressable**: the same image bytes always
 produce the same filename, so two writers (legacy + SPA) don't
 conflict.
 
-Eviction: never automatic. The user can run `make clean-cache` to
-purge.
+Eviction: never automatic. Cache purging remains a manual user action;
+there is no cache-cleanup recipe in the justfile.
 
 ### 4.2 Cached envelopes
 

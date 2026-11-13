@@ -32,5 +32,5 @@ pages that the legacy `pd-ocr-labeler` would have written in v2.1 format.
 1. Export a per-page envelope from `pd-ocr-labeler` or `pdomain-ocr-labeler-spa`
    (the `<project>_NNN.json` sidecar in the project's `page-images/` directory).
 2. Drop it here as `<project>_NNN.json`.
-3. Run `make test` — the parametrised tests pick it up automatically.
+3. Run `just test` — the parametrised tests pick it up automatically.
 4. Also copy to `tests/conformance/fixtures/` and update that README.

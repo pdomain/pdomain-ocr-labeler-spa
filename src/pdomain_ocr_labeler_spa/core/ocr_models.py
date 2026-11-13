@@ -14,7 +14,7 @@ travels independently of any project, gets exercised on app startup
 more surface in M3+ (provenance, predictor cache shape, etc.).
 ``core/models.py`` is for *project-scoped* domain shapes.
 
-Generated TS via ``make openapi-export`` keys on field name + position
+Generated TS via ``just openapi-export`` keys on field name + position
 — append-only, never reorder.
 
 Validation — top-level envelopes, so ``extra="forbid"`` per

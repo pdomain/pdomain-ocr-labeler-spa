@@ -343,7 +343,7 @@ def main(argv: list[str] | None = None) -> int:
         )
 
     # Write the resolved port to .pdlabeler-port so vite.config.ts can
-    # read it during `make frontend-dev` (issue #323).
+    # read it during `just frontend-dev` (issue #323).
     Path(".pdlabeler-port").write_text(str(actual_port))
 
     # Inject the resolved port into the Settings overrides so the single
@@ -354,7 +354,7 @@ def main(argv: list[str] | None = None) -> int:
     host = settings.host
     port = settings.port
 
-    # Surface the resolved torch device so operators running `make run`
+    # Surface the resolved torch device so operators running `just run`
     # can see whether the local GPU was picked up before the OCR
     # pipeline starts pulling models. ``describe_device()`` never raises
     # and lazily imports torch, so the cost is bounded and a torch-less

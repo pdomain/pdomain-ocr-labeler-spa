@@ -18,9 +18,9 @@ Generate the fixture first (idempotent)::
 
 Then run::
 
-    make exercise-real
+    just exercise-real
     # or for headed mode:
-    HEADED=1 make exercise-real
+    HEADED=1 just exercise-real
     # or directly:
     uv run --group e2e pytest tests/e2e/exercise_real_project.py -v
 
@@ -108,7 +108,7 @@ def exercise_server(tmp_path_factory: pytest.TempPathFactory) -> Iterator[Exerci
     tests within this module.
     """
     if not _spa_built():
-        pytest.skip("SPA not built — run `make frontend-build` (or `make e2e`) first")
+        pytest.skip("SPA not built — run `just frontend-build` (or `just e2e`) first")
 
     if not _EXERCISE_FIXTURE_SRC.exists():
         pytest.skip("Exercise fixture missing — run: uv run python scripts/generate_exercise_fixture.py")

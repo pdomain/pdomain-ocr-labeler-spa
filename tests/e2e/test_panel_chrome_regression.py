@@ -1,7 +1,7 @@
 """Regression guards for panel-chrome bugs fixed in b193e9f and 7f22eef.
 
 Four checks that each guard a specific failure mode caught by vitest but
-missed by the prior e2e suite (which only ran ``make e2e`` headless against
+missed by the prior e2e suite (which only ran ``just e2e`` headless against
 the real app and never exercised collapse / re-open flows):
 
   P1 — Actions panel toggle: chevron direction reflects open/closed state;

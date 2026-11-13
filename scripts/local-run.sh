@@ -5,7 +5,7 @@
 # + npm), builds the SPA via the local-frontend-* path (which preserves
 # `pnpm link` after pnpm install), and launches the app.
 #
-# Deliberately does NOT delegate to `make run` — that path runs
+# Deliberately does NOT delegate to `just run` — that path runs
 # `frontend-build` -> `frontend-install` (--frozen-lockfile), which is
 # the registry path and would discard the local-link overlay.
 set -euo pipefail
@@ -29,17 +29,17 @@ PROJECT_VENV="$(venv_under "$CANONICAL_REPO_ROOT")"
 MARKER="$PROJECT_VENV/.pdomain-local-mode"
 
 if [[ ! -f "$MARKER" ]]; then
-  echo "ERROR: not in local-dev mode. Run 'make local-dev' first." >&2
+  echo "ERROR: not in local-dev mode. Run 'just local-dev' first." >&2
   exit 1
 fi
 
 # 1) Re-apply editable Python siblings (uv sync drops them; defensive here).
-make -C "$REPO_ROOT" local-setup-py
+just --justfile "$REPO_ROOT/justfile" local-setup-py
 
 # 2) Build SPA bundle via local-frontend path (preserves pnpm link).
-make -C "$REPO_ROOT" local-frontend-build
+just --justfile "$REPO_ROOT/justfile" local-frontend-build
 
-# 3) Launch — reproduce `make run`'s launch step inline so we don't
+# 3) Launch — reproduce `just run`'s launch step inline so we don't
 #    trigger the registry-path `frontend-build` dependency chain.
 #    --no-sync is REQUIRED: a plain `uv run` re-syncs and reverts the
 #    editable pd-* siblings that local-setup-py just installed, breaking

@@ -41,7 +41,7 @@ acceptance and predecessor undo stay open in
   side-effects are both stated, including a bad-state path.
 - Tests cite covered IDs with a `Covers: B-...` docstring line or
   `@behavior("B-...")`.
-- `coverage.md` is generated. Run `make behavior-coverage`; do not edit
+- `coverage.md` is generated. Run `just behavior-coverage`; do not edit
   it by hand.
 
 ## Files

@@ -81,7 +81,7 @@ def test_dockerfile_has_three_named_stages() -> None:
 
 def test_stage_names_are_spa_wheel_runtime() -> None:
     """Stage names are part of the contract — peer tooling
-    (``docker build --target wheel``, CI, the Makefile docker targets)
+    (``docker build --target wheel``, CI, the justfile docker targets)
     references them by name. Renaming a stage is a breaking change."""
     froms = _from_lines()
     # Each FROM should end with `AS <name>` (case-insensitive).
@@ -478,16 +478,16 @@ def test_dockerfile_spa_stage_installs_with_pnpm_frozen_lockfile() -> None:
     This used to also assert that ``.github/workflows/release.yml`` reached the
     same install through ``make`` targets, keeping Docker and CI in step. The
     workflows were removed on 2026-09-13, so there is no second path left to
-    agree with; releasing now runs ``make`` locally through
+    agree with; releasing now runs ``just`` locally through
     ``scripts/release-common.sh``, which uses the same targets. The Dockerfile
-    half is still a real invariant: it cannot delegate to the Makefile, so it
+    half is still a real invariant: it cannot delegate to the justfile, so it
     has to get the discipline right on its own.
     """
     spa = _spa_stage_text()
 
     assert "pnpm install --frozen-lockfile" in spa, (
         "Dockerfile spa stage must invoke `pnpm install --frozen-lockfile` "
-        "directly — it cannot delegate to a Makefile target (#416 / F-011)."
+        "directly — it cannot delegate to a justfile target (#416 / F-011)."
     )
 
     code_lines = [ln for ln in spa.splitlines() if not ln.lstrip().startswith("#")]

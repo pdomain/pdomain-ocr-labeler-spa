@@ -1,9 +1,9 @@
 """``docs/process/DEVELOPMENT.md`` smoke shape.
 
 Catches the most common drift modes between the development guide and
-the actual Makefile / `mise.toml`:
+the actual justfile / `mise.toml`:
 
-* References a target that doesn't exist in the Makefile (e.g.
+* References a target that doesn't exist in the justfile (e.g.
   someone renames ``frontend-install`` → ``ui-install`` and forgets to
   update the doc).
 * References a Node/Python version pin that doesn't match
@@ -20,7 +20,6 @@ import subprocess
 from pathlib import Path
 
 DOC = Path(__file__).resolve().parents[2] / "docs" / "process" / "DEVELOPMENT.md"
-MAKEFILE = Path(__file__).resolve().parents[2] / "Makefile"
 JUSTFILE = Path(__file__).resolve().parents[2] / "justfile"
 MISE = Path(__file__).resolve().parents[2] / "mise.toml"
 
@@ -29,12 +28,16 @@ def test_development_doc_exists() -> None:
     assert DOC.is_file(), f"{DOC} missing"
 
 
-def test_development_doc_references_only_existing_make_targets() -> None:
-    """Every ``make <foo>`` invocation in the doc must resolve to a
-    real Makefile target."""
+def test_development_doc_references_only_existing_just_recipes() -> None:
     body = DOC.read_text()
-    referenced = set(re.findall(r"make ([a-z][a-z0-9-]*)", body))
-
+    referenced = set(
+        re.findall(
+            r"(?:^|`)\s*(?:[A-Z][A-Z0-9_]*=\S+\s+)*just ([a-z][a-z0-9-]*)",
+            body,
+            re.MULTILINE,
+        )
+    )
+    assert referenced, "DEVELOPMENT.md must document real task commands"
     result = subprocess.run(
         ["just", "--justfile", str(JUSTFILE), "--summary"],
         capture_output=True,
@@ -43,18 +46,17 @@ def test_development_doc_references_only_existing_make_targets() -> None:
     )
     assert result.returncode == 0, result.stderr
     targets = set(result.stdout.split())
-
     missing = referenced - targets
-    assert not missing, f"DEVELOPMENT.md references make targets that don't exist: {missing}"
+    assert not missing, f"DEVELOPMENT.md references recipes that do not exist: {missing}"
     for target in sorted(referenced):
-        forwarded = subprocess.run(
-            ["make", "--directory", str(MAKEFILE.parent), "--dry-run", target],
+        rendered = subprocess.run(
+            ["just", "--justfile", str(JUSTFILE), "--show", target],
             capture_output=True,
             text=True,
             timeout=20,
         )
-        assert forwarded.returncode == 0, forwarded.stderr
-        assert f"just {target}" in forwarded.stdout, forwarded.stdout
+        assert rendered.returncode == 0, rendered.stderr
+        assert f"{target}:" in rendered.stdout, rendered.stdout
 
 
 def test_development_doc_pins_match_mise_toml() -> None:
@@ -91,7 +93,7 @@ def test_development_doc_mentions_uv_install_path() -> None:
 
 def test_development_doc_is_honest_about_m0_limits() -> None:
     """B-12 regression: the dev-server section used to claim
-    ``make dev`` proxies ``/`` to Vite and a contributor could open
+    ``just dev`` proxies ``/`` to Vite and a contributor could open
     ``http://localhost:5173`` to see "the SPA" — both halves are false
     in M0 (``GET /`` is 404 on the backend; the Vite scaffold has no
     real SPA). Pin the doc to *call out* the M0 status so a first-

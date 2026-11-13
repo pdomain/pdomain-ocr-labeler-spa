@@ -15,42 +15,42 @@ milestone-by-milestone implementation (M0…M9). Architecture: `docs/architectur
 
 | target | does |
 |---|---|
-| `make setup AI=1` | `uv sync` + pre-commit hooks + hatch-vcs version refresh |
-| `make frontend-install AI=1` | `pnpm install --frozen-lockfile` inside `frontend/` |
-| `make test AI=1` | pytest — unit + integration, excludes `e2e/` |
-| `make frontend-test AI=1` | vitest (jsdom) |
-| `make e2e AI=1` | Playwright E2E (requires `playwright install chromium`) |
-| `make lint AI=1` / `make format AI=1` | ruff (format runs `--fix` too) |
-| `make pre-commit-check AI=1` | all pre-commit hooks on every tracked file |
-| `make dev` | uvicorn --reload, points at Vite dev server on :5173 |
-| `make frontend-dev` | Vite HMR dev server on :5173 |
-| `make frontend-build AI=1` | builds SPA into `src/pdomain_ocr_labeler_spa/static/` |
-| `make openapi-export AI=1` | exports `/openapi.json` → regenerates `frontend/src/api/types.ts` |
-| `make build AI=1` | builds the wheel (requires populated `static/`) |
-| `make run` | builds SPA if missing or stale, then `pdomain-ocr-labeler-ui` (production-style) |
-| `make ci AI=1` | setup + test + frontend-test + build |
-| `make docker-build` | builds the production Docker image |
-| `make local-setup` | clone any missing sibling pd-* repos |
-| `make local-dev` | switch to local-dev mode (pdomain-book-tools editable + pdomain-ui linked + marker) |
-| `make local-check` | print local-dev mode + per-sibling resolution |
-| `make local-upgrade-deps` | upgrade deps then restore editables (local-mode only) |
-| `make local-setup-py` | re-apply editable Python siblings after any `uv sync` (idempotent) |
-| `make local-frontend-install` | `pnpm install` + restore `pnpm link` overlays for npm siblings |
-| `make local-frontend-build` | Vite build via local-link-preserving path (depends on `local-frontend-install`) |
-| `make local-run` | run SPA against local-dev workspace — re-applies Python editables + rebuilds SPA via local path (does NOT call `make run`; avoids registry `pnpm install --frozen-lockfile` that would discard `pnpm link`) |
-| `make update-pdomain-deps` | bump pd-* sibling deps to registry latest; leaves diff for review |
+| `AI=1 just setup` | `uv sync --locked --group dev` + pre-commit hooks + hatch-vcs version refresh |
+| `AI=1 just frontend-install` | `pnpm install --frozen-lockfile` inside `frontend/` |
+| `AI=1 just test` | pytest — excludes `e2e/`, slow, and integration markers |
+| `AI=1 just frontend-test` | vitest (jsdom) |
+| `AI=1 just e2e` | Playwright E2E (requires `playwright install chromium`) |
+| `AI=1 just lint` / `AI=1 just format` | ruff (lint fixes; format only formats) |
+| `AI=1 just pre-commit-check` | all pre-commit hooks on every tracked file |
+| `just dev` | uvicorn --reload, points at Vite dev server on :5173 |
+| `just frontend-dev` | Vite HMR dev server on :5173 |
+| `AI=1 just frontend-build` | builds SPA into `src/pdomain_ocr_labeler_spa/static/` |
+| `AI=1 just openapi-export` | exports `/openapi.json` → regenerates `frontend/src/api/types.ts` |
+| `AI=1 just build` | exports OpenAPI, builds the SPA, then builds sdist and wheel |
+| `just run` | builds SPA if missing or stale, then `pdomain-ocr-labeler-ui` (production-style) |
+| `AI=1 just ci` | locked setup + Python/frontend checks + tests + behavior coverage + build + strict docgraph |
+| `just docker-build` | builds the production Docker image |
+| `just local-setup` | clone any missing sibling pd-* repos |
+| `just local-dev` | switch to local-dev mode (pdomain-book-tools editable + pdomain-ui linked + marker) |
+| `just local-check` | print local-dev mode + per-sibling resolution |
+| `just local-upgrade-deps` | upgrade deps then restore editables (local-mode only) |
+| `just local-setup-py` | re-apply editable Python siblings after any `uv sync` (idempotent) |
+| `just local-frontend-install` | `pnpm install` + restore `pnpm link` overlays for npm siblings |
+| `just local-frontend-build` | Vite build via local-link-preserving path (depends on `local-frontend-install`) |
+| `just local-run` | run SPA against local-dev workspace — re-applies Python editables + rebuilds SPA via local path (does NOT call `just run`; avoids registry `pnpm install --frozen-lockfile` that would discard `pnpm link`) |
+| `just update-pdomain-deps` | bump pd-* sibling deps to registry latest; leaves diff for review |
 
 See the workspace `docs/process/local-dev.md` for the canonical local-dev pattern (spec #362).
 
-`AI=1` captures verbose output to `.ci-ai.log`; stdout shows `✅` on pass or
+`AI=1` captures verbose output to `.ci-ai.log`; stdout shows one `PASS: <recipe>` line on pass or
 filtered failure sections on error. Remove `AI=1` only if you need full verbose
 output for debugging.
 
 ## Rules
 
-- Always run `make ci AI=1` before committing.
-- Make targets first; fall back to `uv run …` (or `npm`, `vitest`) only when no target exists.
-- Never `python -m pytest`. Always `uv run pytest` or `make test`.
+- Always run `AI=1 just ci` before committing.
+- Just recipes first; fall back to `uv run …` (or `pnpm`, `vitest`) only when no target exists.
+- Never `python -m pytest`. Always `uv run pytest` or `just test`.
   Bare `python`/`python3`/`.venv/bin/python` miss the venv.
 - Backend: FastAPI + uvicorn. Frontend: React 19 + Vite + TS + TanStack Query + Tailwind + Konva.
 - `data-testid` contract governs Playwright driver integration — see `docs/architecture/13-driver-contract.md`.
@@ -59,8 +59,8 @@ output for debugging.
 - Shipped behavior lives in `docs/architecture/`. If code and an architecture doc disagree, change the architecture doc
   to match the code, with evidence. Unfinished design stays in `docs/specs/`. The roadmap is `docs/context/intent-map.md`.
 - Open questions live in `OPEN_QUESTIONS.md`; do not resolve them unilaterally.
-- After FastAPI model changes: run `make openapi-export` to keep TS types in sync.
-- `make build` will refuse without a populated `static/` — run `make frontend-build` first.
+- After FastAPI model changes: run `just openapi-export` to keep TS types in sync.
+- `just build` builds the SPA before the sdist and wheel; the wheel hook rejects a missing bundle.
 - Track open bugs in the issue tracker and open design questions in
   `OPEN_QUESTIONS.md`. Record durable outcomes in `docs/context/decisions.md`.
 - Auth/S3/Postgres/managed-adapter axes are deferred (D-042) — do not implement without user OK.
@@ -206,7 +206,7 @@ change any step below.
    worktree path + branch, use the `finishing-a-development-branch` skill to
    decide how to integrate.
 9. **TDD.** Write the failing test first where the plan calls for it.
-10. **Verify before committing.** Focused verification plus `make ci`.
+10. **Verify before committing.** Focused verification plus `just ci`.
 11. **Commit locally; do not push** without explicit say-so.
 
 <!-- workspace-process:end -->
@@ -222,13 +222,13 @@ change any step below.
 - The default branch is `master`.
 <!-- <<< repo-setup:repo-facts -->
 
-<!-- >>> repo-setup:commands-and-gates sha256:a26d2537f28c758ae76d5790b578e9f8e6ed4f7ccf91c8ccc00ac2db4e3c6176 -->
+<!-- >>> repo-setup:commands-and-gates sha256:bda452dcbd848059bdff621959f6f80ac5a9fa5e54fd8448fa8f84ad95ebafb1 -->
 ## Commands and gates
 
-- Run backend tests with `make test` or a focused `uv run pytest ...` command.
-- Run the repository lint gate with `make lint`.
+- Run backend tests with `just test` or a focused `uv run pytest ...` command.
+- Run the repository lint gate with `just lint`.
 - Run focused Python checks through `uv run ruff check`, `uv run ruff format`, and `uv run basedpyright`.
-- Run the full repository gate with `make ci AI=1` before committing.
+- Run the full repository gate with `AI=1 just ci` before committing.
 <!-- <<< repo-setup:commands-and-gates -->
 
 <!-- >>> repo-setup:writing-and-review sha256:be7f6da1ca37f92092fe1f540c5f90a319ac246169076519250033482ca47424 -->

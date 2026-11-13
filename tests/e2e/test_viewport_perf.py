@@ -14,7 +14,7 @@ Spec: specs/21-konva-renderer.md §11 (Performance pinning),
       §14 (Tests — ``test_viewport_perf.py``).
 
 Run:
-    make e2e
+    just e2e
     # or
     uv run pytest tests/e2e/test_viewport_perf.py -v
 """

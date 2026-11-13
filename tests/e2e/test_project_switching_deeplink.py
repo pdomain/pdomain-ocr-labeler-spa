@@ -67,7 +67,7 @@ def switch_server(tmp_path_factory: pytest.TempPathFactory) -> Iterator[SwitchSe
     (nothing-in-memory) server state for its first navigation.
     """
     if not _spa_built():
-        pytest.skip("SPA not built — run `make frontend-build` (or `make e2e`) before E2E tests")
+        pytest.skip("SPA not built — run `just frontend-build` (or `just e2e`) before E2E tests")
 
     data_root = tmp_path_factory.mktemp("switch-data")
     cache_root = tmp_path_factory.mktemp("switch-cache")

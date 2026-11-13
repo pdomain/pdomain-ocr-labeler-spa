@@ -5,7 +5,7 @@
 # PY_SIBLINGS entry, so that a prior `uv sync` (which restores registry
 # versions) is re-overlaid with the local editable installs.
 #
-# Requires local-dev mode marker — call `make local-dev` first if absent.
+# Requires local-dev mode marker — call `just local-dev` first if absent.
 set -euo pipefail
 
 # uv installs into UV_PROJECT_ENVIRONMENT when that is set and into .venv
@@ -33,13 +33,13 @@ MARKER="$PROJECT_VENV/.pdomain-local-mode"
 say() { echo "[local-setup-py] $*"; }
 
 if [[ ! -f "$MARKER" ]]; then
-  echo "ERROR: not in local-dev mode. Run 'make local-dev' first." >&2
+  echo "ERROR: not in local-dev mode. Run 'just local-dev' first." >&2
   exit 1
 fi
 
 for s in "${PY_SIBLINGS[@]}"; do
   if [[ ! -d "$WORKSPACE_ROOT/$s" ]]; then
-    say "sibling missing: $WORKSPACE_ROOT/$s (run 'make local-setup'); skipping"
+    say "sibling missing: $WORKSPACE_ROOT/$s (run 'just local-setup'); skipping"
     continue
   fi
   say "-> installing editable: $s"

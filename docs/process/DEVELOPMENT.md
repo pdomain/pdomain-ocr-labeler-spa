@@ -40,24 +40,24 @@ the repo) gives you both.
   `mise.toml` comment for why — the aqua-backed installer recently
   broke verifying Astral's release attestations).
 
-`make help` lists every target with a one-line description. Where
-this doc says "run `npm ...`" it means under mise — either with mise
-auto-activation in your shell, or explicitly via `mise exec -- npm
+`just --list` lists the available recipes. Where
+this doc says "run `pnpm ...`" it means under mise — either with mise
+auto-activation in your shell, or explicitly via `mise exec -- pnpm
 ...` from a non-activated session.
 
 ## First-time setup
 
 ```sh
 mise install         # installs Node 24 + Python 3.13 per mise.toml
-make setup           # uv sync + install pre-commit hooks + refresh version
-make frontend-install  # npm install inside frontend/
+just setup           # uv sync + install pre-commit hooks + refresh version
+just frontend-install  # frozen pnpm install inside frontend/
 ```
 
-`make setup` runs `uv sync`, installs the pre-commit hooks, and forces
+`just setup` runs `uv sync --locked --group dev`, installs the pre-commit hooks, and forces
 `hatch-vcs` to re-derive the package version from the current git
-state. `make frontend-install` runs `npm install` inside `frontend/`.
+state. `just frontend-install` runs `pnpm install --frozen-lockfile` inside `frontend/`, through mise when available.
 
-(For users who can't or won't install mise, `make mise-setup` is a
+(For users who can't or won't install mise, `just mise-setup` is a
 fallback that downloads a vendored mise binary and runs `mise
 install` for you. End users running the published wheel never need
 mise — the wheel ships with the SPA bundle prebuilt.)
@@ -72,8 +72,8 @@ Until the frontend bundle is built (next iteration), `GET /` will
 return a helpful 404 explaining how to populate `static/`.
 
 ```sh
-make test            # pytest — main backend feedback loop
-make lint            # ruff check
+just test            # pytest — main backend feedback loop
+just lint            # ruff lint fixes
 uv run pdomain-ocr-labeler-ui --no-browser --port 8080
 curl http://127.0.0.1:8080/healthz
 curl http://127.0.0.1:8080/env.js
@@ -81,62 +81,60 @@ curl http://127.0.0.1:8080/env.js
 
 ### Two-process dev loop (Vite + FastAPI)
 
-Once you've run `make frontend-install`, the standard pgdp-prep-style
+Once you've run `just frontend-install`, the standard pgdp-prep-style
 dev loop works:
 
 ```sh
 # terminal 1 — FastAPI on :8080 with --reload
-make dev
+just dev
 
 # terminal 2 — Vite dev server on :5173. The Vite-side proxy
 # forwards /api, /image-cache, /env.js back to :8080 (see
 # `frontend/vite.config.ts`).
-make frontend-dev
+just frontend-dev
 ```
 
 Open `http://localhost:5173` in a browser. The FastAPI side will
-still 404 on `/` until you `make frontend-build` to populate
+still 404 on `/` until you `just frontend-build` to populate
 `static/`, but Vite at :5173 serves the SPA shell directly during
 development.
 
 ## Tests
 
 ```sh
-make test            # pytest (unit + integration; excludes e2e/)
-make frontend-test   # vitest (jsdom)
-make e2e             # Playwright — requires `playwright install chromium`
+just test            # pytest (excludes e2e/, slow, and integration markers)
+just frontend-test   # vitest (jsdom)
+just e2e             # Playwright — requires `playwright install chromium`
 ```
 
-Both `make test` and `make frontend-test` are part of `make ci`.
+Both `just test` and `just frontend-test` are part of `just ci`.
 
 ## Lint / format
 
 ```sh
-make lint            # ruff check
-make format          # ruff format (writes)
-make pre-commit-check  # all pre-commit hooks on every tracked file
+just lint            # ruff lint fixes
+just format          # ruff format (writes)
+just pre-commit-check  # all pre-commit hooks on every tracked file
 ```
 
-Pre-commit runs automatically on `git commit` once `make setup` has
+Pre-commit runs automatically on `git commit` once `just setup` has
 installed the hooks.
 
 ## Building a wheel
 
 ```sh
-make frontend-build  # writes the SPA bundle into src/pdomain_ocr_labeler_spa/static/
-make build           # produces the wheel; refuses without a populated static/
+just build           # OpenAPI export + SPA build + explicit sdist, then wheel
 ```
 
-The build refusal is enforced by `build_hooks/spa_check.py`
-— intentional, so a forgotten `make frontend-build` can't ship a blank
-page.
+`just build` prepares the SPA before packaging. `build_hooks/spa_check.py`
+rejects a direct wheel build when the bundle is missing or empty.
 
 ## Regenerating typed API client
 
 After changing FastAPI request/response models:
 
 ```sh
-make openapi-export  # exports /openapi.json then regenerates frontend/src/api/types.ts
+just openapi-export  # exports /openapi.json then regenerates frontend/src/api/types.ts
 ```
 
 This keeps the TypeScript surface in lock-step with the Python models.
@@ -144,7 +142,7 @@ This keeps the TypeScript surface in lock-step with the Python models.
 ## CI
 
 ```sh
-make ci   # setup + test + frontend-test + build
+just ci   # locked setup, Python/frontend checks, tests, behavior coverage, build, strict docgraph
 ```
 
 Mirrors the `.github/workflows/release.yml` pipeline.

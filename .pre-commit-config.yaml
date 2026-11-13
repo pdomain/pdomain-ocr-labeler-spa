@@ -2,7 +2,7 @@
 # Hook list is intentionally kept in lockstep with sibling repos so a single
 # `pre-commit install` works the same way across the workspace.
 
-# `make setup` runs `pre-commit install` once; with this directive it also
+# `just setup` runs `pre-commit install` once; with this directive it also
 # installs the post-commit / post-rewrite / post-checkout hooks (see
 # `local` repo below) without requiring `--hook-type post-commit`.
 #
@@ -12,7 +12,7 @@
 # post-rewrite covers `git commit --amend` and `git rebase`;
 # post-checkout covers `git switch`/`git checkout` and `git
 # cherry-pick` when it leaves HEAD on a different sha. All three
-# converge on `make refresh-version` (via
+# converge on `just refresh-version` (via
 # `scripts/refresh_version_git_hook.sh`) so the refresh entrypoint
 # stays single-source.
 default_install_hook_types: [pre-commit, post-commit, post-rewrite,
@@ -79,7 +79,7 @@ repos:
     hooks:
     # External hook revisions must be full commit SHAs. A tag can be moved
     # upstream, and pre-commit runs that code on every commit. Update pins
-    # only with `make update-hooks` (`pre-commit autoupdate --freeze`).
+    # only with `just update-hooks` (`pre-commit autoupdate --freeze`).
     -   id: require-frozen-hook-revs
         name: external hook revs are frozen commit SHAs
         language: pygrep
@@ -91,7 +91,7 @@ repos:
     #
     # All three hook stages share a single shell entry point
     # (`scripts/refresh_version_git_hook.sh`) which shells out to
-    # `make refresh-version`. Failure is non-fatal — a missing
+    # `just refresh-version`. Failure is non-fatal — a missing
     # toolchain must not block a commit, rebase, or checkout.
     -   id: refresh-version-post-commit
         name: refresh hatch-vcs version after commit

@@ -19,7 +19,7 @@ This test uses an API-level httpx integration flow (no browser):
 
 Note: the browser path (edit → reload → assert in UI) was blocked by the
 pre-existing @pdomain/pdomain-ui migration on main (confirmed by checking
-make frontend-build on main). This API-level test fully exercises the
+just frontend-build on main). This API-level test fully exercises the
 server-side persistence path.
 """
 

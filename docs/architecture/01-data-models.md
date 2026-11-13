@@ -799,7 +799,7 @@ so the SPA now owns its own `pdomain-`-prefixed root.) Override via
 
 ## 6. OpenAPI export rules
 
-`make openapi-export` runs:
+`just openapi-export` runs:
 
 ```sh
 uv run python -c "import json; from pdomain_ocr_labeler_spa.bootstrap import build_app; \
@@ -807,7 +807,7 @@ uv run python -c "import json; from pdomain_ocr_labeler_spa.bootstrap import bui
 cd frontend && npx --yes openapi-typescript openapi.json -o src/api/types.ts
 ```
 
-**CI gate**: re-run `make openapi-export` and `git diff --exit-code`.
+**CI gate**: re-run `just openapi-export` and `git diff --exit-code`.
 This closes the pgdp-prep drift gap. PR fails if `types.ts` is out of
 sync.
 

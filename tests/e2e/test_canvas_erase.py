@@ -23,7 +23,7 @@ behavior) leaves the flag ``False`` forever.
 Follows the self-contained fixture-server pattern established in
 ``test_review_queue_panel.py`` / ``test_region_layer_visibility.py``.
 
-Run with:   make e2e AI=1
+Run with:   AI=1 just e2e
 Or inline:  PLAYWRIGHT_BROWSERS_PATH=/cache/shared-ai/ms-playwright \
             uv run --group e2e pytest tests/e2e/test_canvas_erase.py -n 0 -p no:cacheprovider --no-cov
 """
@@ -144,7 +144,7 @@ class CanvasEraseServer:
 @pytest.fixture(scope="module")
 def canvas_erase_server(tmp_path_factory: pytest.TempPathFactory) -> Iterator[CanvasEraseServer]:
     if not _spa_built():
-        pytest.skip("SPA not built — run `make frontend-build` (or `make e2e`) first")
+        pytest.skip("SPA not built — run `just frontend-build` (or `just e2e`) first")
 
     data_root = tmp_path_factory.mktemp("canvas-erase-data")
     cache_root = tmp_path_factory.mktemp("canvas-erase-cache")

@@ -18,7 +18,7 @@ DISTINCT ground-truth text, so an unfixed resolver would silently show page
 2's real (but wrong) text under the page-1 selection instead of showing no
 selection at all.
 
-Run with:   make e2e AI=1
+Run with:   AI=1 just e2e
 Or inline:  uv run --group e2e pytest tests/e2e/test_selection_scoped_to_page.py -v
 """
 
@@ -177,7 +177,7 @@ def selection_page_scope_server(
     tmp_path_factory: pytest.TempPathFactory,
 ) -> Iterator[SelectionPageScopeServer]:
     if not _spa_built():
-        pytest.skip("SPA not built — run `make frontend-build` (or `make e2e`) first")
+        pytest.skip("SPA not built — run `just frontend-build` (or `just e2e`) first")
 
     data_root = tmp_path_factory.mktemp("selection-page-scope-data")
     cache_root = tmp_path_factory.mktemp("selection-page-scope-cache")

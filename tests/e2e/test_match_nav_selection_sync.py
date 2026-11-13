@@ -27,7 +27,7 @@ seeded via the same ``BookPage.from_dict`` + ``_ingest_ocr_result`` path
 ``test_selection_operations_parity.py`` uses, so the fixture loads with real
 line_matches immediately (no OCR wait).
 
-Run with:   make e2e AI=1
+Run with:   AI=1 just e2e
 Or inline:  uv run --group e2e pytest tests/e2e/test_match_nav_selection_sync.py -v
 """
 
@@ -212,7 +212,7 @@ class MatchNavServer:
 @pytest.fixture(scope="module")
 def match_nav_server(tmp_path_factory: pytest.TempPathFactory) -> Iterator[MatchNavServer]:
     if not _spa_built():
-        pytest.skip("SPA not built — run `make frontend-build` (or `make e2e`) first")
+        pytest.skip("SPA not built — run `just frontend-build` (or `just e2e`) first")
 
     data_root = tmp_path_factory.mktemp("match-nav-data")
     cache_root = tmp_path_factory.mktemp("match-nav-cache")

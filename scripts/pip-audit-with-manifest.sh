@@ -14,7 +14,7 @@
 #      URL — so there is NO silent blind spot.
 #
 # Usage: scripts/pip-audit-with-manifest.sh [--no-dev]
-#        Called via `make pip-audit` or `make pip-audit-no-dev`.
+#        Called via `just pip-audit` or `just pip-audit-no-dev`.
 
 set -euo pipefail
 

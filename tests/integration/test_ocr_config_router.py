@@ -15,7 +15,7 @@ What slice 8a shipped:
 1. ``GET /api/ocr-config`` returns a ``GetOCRConfigResponse``-shaped
    payload composed from the iter-7 DTOs.
 2. The route is ``include_in_schema=True`` because OpenAPI export
-   (``make openapi-export``) drives the frontend ``types.ts``.
+   (``just openapi-export``) drives the frontend ``types.ts``.
 
 What slice 8c-i added: stateless ``POST /api/ocr-config/models`` echo
 with stock-only key validation.
@@ -292,7 +292,7 @@ def test_get_ocr_config_hf_pinned_revision_unset(client: TestClient) -> None:
 def test_get_ocr_config_appears_in_openapi_schema(client: TestClient) -> None:
     """``GET /api/ocr-config`` surfaces in OpenAPI for ``types.ts`` gen.
 
-    ``make openapi-export`` walks the OpenAPI doc to emit
+    ``just openapi-export`` walks the OpenAPI doc to emit
     ``frontend/src/api/types.ts``; an accidentally
     ``include_in_schema=False`` route would silently break the SPA's
     types contract.
@@ -435,7 +435,7 @@ def test_post_ocr_config_models_appears_in_openapi_schema(
     client: TestClient,
 ) -> None:
     """``POST /api/ocr-config/models`` surfaces in OpenAPI so
-    ``make openapi-export`` regenerates ``types.ts``. Without this,
+    ``just openapi-export`` regenerates ``types.ts``. Without this,
     the frontend mutation hook can't be typed against the same DTO.
     """
     spec = client.get("/openapi.json").json()
@@ -798,7 +798,7 @@ def test_post_rescan_response_validates_against_dto(client: TestClient) -> None:
 
 def test_post_rescan_appears_in_openapi_schema(client: TestClient) -> None:
     """``POST /api/ocr-config/rescan`` surfaces in OpenAPI for ``types.ts``
-    generation. ``make openapi-export`` walks the OpenAPI doc.
+    generation. ``just openapi-export`` walks the OpenAPI doc.
     """
     spec = client.get("/openapi.json").json()
     assert "/api/ocr-config/rescan" in spec["paths"]

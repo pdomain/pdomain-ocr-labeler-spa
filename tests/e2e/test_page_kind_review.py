@@ -130,7 +130,7 @@ class PageKindReviewServer:
 @pytest.fixture(scope="module")
 def page_kind_review_server(tmp_path_factory: pytest.TempPathFactory) -> Iterator[PageKindReviewServer]:
     if not _spa_built():
-        pytest.skip("SPA not built — run `make frontend-build` (or `make e2e`) first")
+        pytest.skip("SPA not built — run `just frontend-build` (or `just e2e`) first")
 
     data_root = tmp_path_factory.mktemp("page-kind-review-data")
     cache_root = tmp_path_factory.mktemp("page-kind-review-cache")

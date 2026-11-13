@@ -25,7 +25,7 @@ Two functions, two mounts:
    driver agent's pre-pass. The catch-all is registered LAST so it
    doesn't shadow real routes.
 
-When the bundled SPA is missing (M0 dev mode — no ``make
+When the bundled SPA is missing (M0 dev mode — no ``just
 frontend-build`` yet), the catch-all 404s with a helpful message
 naming the missing dir and the build target. The `build_hooks/
 spa_check.py` gate ensures production wheels can't ship in this state,
@@ -316,7 +316,7 @@ def install_spa_fallback(app: FastAPI) -> None:
     """Register the SPA catch-all. MUST be called AFTER every other route.
 
     Spec: ``docs/architecture/02-backend.md §10``. Resolves ``frontend/dist`` (which
-    is copied into ``src/pdomain_ocr_labeler_spa/static/`` by ``make
+    is copied into ``src/pdomain_ocr_labeler_spa/static/`` by ``just
     frontend-build`` / the Dockerfile spa stage) and serves
     ``index.html`` for any non-reserved path. Static assets like
     ``/assets/<hash>.js`` are served directly from the dir (so the
@@ -338,7 +338,7 @@ def install_spa_fallback(app: FastAPI) -> None:
     if static_dir is None:
         log.warning(
             "SPA static bundle not found (expected `index.html` under "
-            "src/pdomain_ocr_labeler_spa/static/). Run `make frontend-build` "
+            "src/pdomain_ocr_labeler_spa/static/). Run `just frontend-build` "
             "to populate it. The catch-all will 503 until then.",
         )
 
@@ -349,7 +349,7 @@ def install_spa_fallback(app: FastAPI) -> None:
             raise HTTPException(
                 status_code=503,
                 detail=(
-                    "SPA bundle not built — run `make frontend-build` "
+                    "SPA bundle not built — run `just frontend-build` "
                     "to populate src/pdomain_ocr_labeler_spa/static/."
                 ),
             )
@@ -380,7 +380,7 @@ def install_spa_fallback(app: FastAPI) -> None:
         # its contents change every build, and it points at hash-named
         # assets that disappear when a new build replaces them. Without
         # an explicit ``no-store`` browsers may serve a stale shell from
-        # disk cache after ``make frontend-build`` (or a wheel upgrade)
+        # disk cache after ``just frontend-build`` (or a wheel upgrade)
         # and trigger a 404 storm against the old asset hashes. Hashed
         # assets above keep the default caching semantics — they're
         # content-addressed and safe to cache aggressively.

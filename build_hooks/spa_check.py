@@ -3,13 +3,13 @@
 The wheel ``force-include``s ``src/pdomain_ocr_labeler_spa/static/`` so the
 published distribution can serve the React SPA without Node at install
 time. If a contributor runs ``uv build`` (or ``hatch build``,
-``pip wheel .``, etc.) without first running ``make frontend-build``,
+``pip wheel .``, etc.) without first running ``just frontend-build``,
 the hatchling ``force-include`` silently no-ops on the missing directory
 and the wheel ends up shipping a blank app.
 
 This hook closes that gap: it runs before the wheel artifacts are
 gathered and raises a clear error pointing the user at
-``make frontend-build``.
+``just frontend-build``.
 
 Wired in ``pyproject.toml`` as::
 
@@ -43,20 +43,20 @@ class SpaBundleCheckHook(BuildHookInterface):
     def initialize(self, version: str, build_data: dict) -> None:
         """Abort the wheel build when the SPA bundle is absent or empty."""
         # Only enforce on the wheel target; sdists deliberately omit the
-        # built SPA (it gets rebuilt by `make build` / CI).
+        # built SPA (it gets rebuilt by `just build` / CI).
         if self.target_name != "wheel":
             return
 
         # Editable installs (`uv pip install -e .`, dev-loop reinstalls)
         # are dev-only and never published. Skipping the SPA check here
-        # lets `make ci` succeed before `make frontend-build` has had a
+        # lets `just ci` succeed before `just frontend-build` has had a
         # chance to run.
         if version == "editable":
             return
 
         # Escape hatch for environments that intentionally build a wheel
         # without the SPA (e.g. publishing a "headless" wheel for tests).
-        # Undocumented on purpose — the supported path is `make build`.
+        # Undocumented on purpose — the supported path is `just build`.
         if os.environ.get("PD_LABELER_SKIP_SPA_CHECK") == "1":
             return
 
@@ -65,7 +65,7 @@ class SpaBundleCheckHook(BuildHookInterface):
             raise RuntimeError(
                 "pdomain-ocr-labeler-spa: SPA bundle is missing — refusing to "
                 f"build a wheel without {self.SPA_INDEX_REL}.\n"
-                "Run `make frontend-build` first (or `make build`, which "
+                "Run `just frontend-build` first (or `just build`, which "
                 "chains the frontend build before `uv build`).\n"
                 "If you really want a wheel without the SPA, set "
                 "PD_LABELER_SKIP_SPA_CHECK=1."

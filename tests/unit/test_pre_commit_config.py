@@ -81,7 +81,7 @@ def test_every_repo_pins_a_rev(config: dict) -> None:
 def test_default_install_hook_types_includes_all_refresh_stages(config: dict) -> None:
     """B-11 + B-17: refresh-version hooks only run if they get installed.
 
-    `pre-commit install` (called by `make setup`) defaults to installing
+    `pre-commit install` (called by `just setup`) defaults to installing
     only the `pre-commit` hook type. `default_install_hook_types`
     extends that so one `pre-commit install` wires up every stage that
     can leave the editable install's `__version__` stale:
@@ -121,12 +121,10 @@ def test_refresh_version_script_exists_and_is_executable() -> None:
 
     mode = script.stat().st_mode
     assert mode & 0o111, f"{REFRESH_HOOK_SCRIPT} must be executable (chmod +x); current mode is {oct(mode)}"
-    # Sanity: the script must call `make refresh-version` so it stays
+    # Sanity: the script must call `just refresh-version` so it stays
     # the single source of truth for the refresh path.
     text = script.read_text(encoding="utf-8")
-    assert "make" in text and "refresh-version" in text, (
-        "refresh hook script must invoke `make refresh-version`"
-    )
+    assert "just --quiet refresh-version" in text, "refresh hook script must invoke `just refresh-version`"
     # Don't bind os to module scope — only need it for stat above.
     del os
 
@@ -171,7 +169,7 @@ def test_refresh_version_hooks_cover_all_three_stages(config: dict) -> None:
 
 
 def test_refresh_version_hooks_share_single_script_entry(config: dict) -> None:
-    """B-17: avoid the 'three copies of `make refresh-version`'
+    """B-17: avoid the 'three copies of `just refresh-version`'
     anti-pattern — every refresh hook must point at the same script
     so a future change to the refresh body lands in one place."""
     hooks = _refresh_hooks(config)
@@ -203,7 +201,7 @@ def test_frontend_tsc_hook_present(config: dict) -> None:
     """Issue #279: frontend-tsc hook must be in the local-repo entry.
 
     Mirrors pdomain-prep-for-pgdp/.pre-commit-config.yaml. Without this hook
-    TypeScript errors only surface in `make lint`, not at commit time.
+    TypeScript errors only surface in `just lint`, not at commit time.
     """
     ids = _local_hook_ids(config)
     assert "frontend-tsc" in ids, (

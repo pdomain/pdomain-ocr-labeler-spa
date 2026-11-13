@@ -235,7 +235,7 @@ def test_filesystem_storage_init_does_not_create_root_directory(tmp_path: Path) 
     its image cache. With default ``Settings()``, the cache root is
     ``Path.home() / ".cache" / "pdomain-ocr-labeler-spa"`` — and the previous
     impl mkdir'd it on construction. That meant any ``build_app()``
-    invocation (e.g. the README smoke test, ``make openapi-export``
+    invocation (e.g. the README smoke test, ``just openapi-export``
     on a fresh container, an introspection probe) silently created
     a directory in the developer's homedir as a side-effect of an
     *import-shaped* operation.

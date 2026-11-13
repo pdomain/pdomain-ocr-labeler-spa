@@ -1,7 +1,7 @@
 """Verify all spec-listed wire shapes appear in the OpenAPI schema.
 
 Acceptance criteria for issue #182:
-- ``make openapi-export`` generates ``frontend/src/api/types.ts`` with no error
+- ``just openapi-export`` generates ``frontend/src/api/types.ts`` with no error
 - ``tsc --noEmit`` passes on the generated types
 - No route handler references an undeclared model shape
 

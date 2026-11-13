@@ -263,7 +263,7 @@ nav-control and source-folder-dialog testid required by
   `HeaderBar` (where the legacy source-folder dialog lives) — this
   preserves the testid but anchors it to a more accurate location.
 
-Run `make e2e` after the wireup; the conformance test must remain
+Run `just e2e` after the wireup; the conformance test must remain
 green.
 
 ---
@@ -286,13 +286,13 @@ Already wired (`Toaster` in `App.tsx`, `useNotificationStream` in
 
 ## 12. Acceptance gates
 
-1. `make frontend-test` — all existing tests pass; new tests cover
+1. `just frontend-test` — all existing tests pass; new tests cover
    `ProjectPage` mount-and-render, `ProjectNavigationControls`,
    `FilterToggle`, `Splitter`, `useDialogStore`.
-2. `make e2e` — `test_driver_contract.py` remains green; new
+2. `just e2e` — `test_driver_contract.py` remains green; new
    `test_project_page_smoke.py` loads a project, navigates Prev/Next,
    opens OCR config dialog, opens word-edit dialog, closes.
-3. `make ci AI=1` — clean.
+3. `AI=1 just ci` — clean.
 4. Manual smoke (CT pass): load a tiny fixture project, see image,
    click a word, edit GT, save, see no errors.
 

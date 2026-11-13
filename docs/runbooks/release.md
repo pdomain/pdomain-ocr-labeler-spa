@@ -18,7 +18,7 @@ For the wheel's deployment contract see [`docs/architecture/15-deployment-dev.md
 ## Prerequisites
 
 - Clean working tree on `master`, in sync with `origin/master`.
-- `make ci AI=1` green (the release script runs this as a pre-flight).
+- `AI=1 just ci` green (the release script runs this as a pre-flight).
 - `gh` CLI authenticated with write access to the repository.
 
 ---
@@ -29,7 +29,7 @@ The wheel ships the pre-built React SPA inside the Python package. Three
 pieces enforce this:
 
 **`frontend/dist/` to `static/` copy**
-`make frontend-build` runs `pnpm run build` inside `frontend/`, then copies
+`just frontend-build` runs `pnpm run build` inside `frontend/`, then copies
 `frontend/dist/` to `src/pdomain_ocr_labeler_spa/static/`.
 (`Makefile:238-245`, verified 2026-06-01)
 
@@ -63,7 +63,7 @@ There is no version field in `pyproject.toml`; the tag is authoritative.
 source = "vcs"
 ```
 
-`make refresh-version` forces `hatch-vcs` to re-derive the version from the
+`just refresh-version` forces `hatch-vcs` to re-derive the version from the
 current git state after a checkout or cherry-pick.
 (`Makefile:46-55`, verified 2026-06-01)
 
@@ -73,13 +73,13 @@ current git state after a checkout or cherry-pick.
 
 | Command | Does |
 |---------|------|
-| `make frontend-build` | Runs `pnpm run build`; copies `frontend/dist/` to `src/.../static/` |
-| `make build` | Chains `frontend-build` then `uv build --wheel`; output under `dist/` |
-| `make ci-slow AI=1` | Full CI (`make ci`) plus `make build`; the release pre-flight |
+| `just frontend-build` | Runs `pnpm run build`; copies `frontend/dist/` to `src/.../static/` |
+| `just build` | Runs `frontend-build`, `uv build --sdist`, then `uv build --wheel`; output under `dist/` |
+| `AI=1 just ci-slow` | Full CI (`just ci`); the release pre-flight |
 
-`make build` calls `uv build --wheel` (not the default `uv build` which also
-produces an sdist). The sdist path fails because the unpacked sdist has no
-`static/`; wheel-only is the supported release path.
+`just build` exports OpenAPI and builds the SPA before running explicit
+`uv build --sdist` and `uv build --wheel` commands, in that order. Both
+artifacts are written under `dist/`.
 (`Makefile:386-393`, verified 2026-06-01)
 
 ---
@@ -90,9 +90,9 @@ produces an sdist). The sdist path fails because the unpacked sdist has no
 
 ```sh
 # From a clean master branch, in sync with origin/master:
-make release-patch   # v0.4.2 -> v0.4.3
-make release-minor   # v0.4.2 -> v0.5.0
-make release-major   # v0.4.2 -> v1.0.0
+just release-patch   # v0.4.2 -> v0.4.3
+just release-minor   # v0.4.2 -> v0.5.0
+just release-major   # v0.4.2 -> v1.0.0
 ```
 
 Each target delegates to `scripts/do-release.sh` via `scripts/release-common.sh`.
@@ -100,7 +100,7 @@ The script (`scripts/release-common.sh`, verified 2026-06-01):
 
 1. Fetches `origin/master` and checks that the working tree is clean and on `master`.
 2. Computes the next three-component version tag from existing `vN.N.N` git tags.
-3. Runs `make ci-slow` (the `RELEASE_PREFLIGHT`).
+3. Runs `just ci-slow` (the `RELEASE_PREFLIGHT`).
 4. Creates an annotated tag `vN.N.N`.
 5. Pushes `master` and the exact tag to `origin`.
 6. Triggers `.github/workflows/release.yml` via `gh workflow run release.yml --ref master -f tag=vN.N.N`.
@@ -119,9 +119,9 @@ The script (`scripts/release-common.sh`, verified 2026-06-01):
 The GitHub workflows were removed on 2026-09-13. `scripts/release-common.sh`
 now does the whole job locally, in this order:
 
-1. Runs the preflight, which is `make ci-slow`, against the working tree.
+1. Runs the preflight, which is `just ci-slow`, against the working tree.
 2. Creates the annotated tag and pushes `master` and the tag.
-3. Builds the artifacts with `make build`, overridable through `RELEASE_BUILD`.
+3. Builds the artifacts with `just build`, overridable through `RELEASE_BUILD`.
 4. Creates the GitHub Release with `gh release create --generate-notes
    --verify-tag` and attaches everything matching `dist/*.whl`, `dist/*.tar.gz`
    and `dist/*.tgz`.
@@ -144,12 +144,11 @@ because the index is generated from release assets.
 
 ## Wheel contents check
 
-There is no pre-merge CI gate any more. `make build` refuses to run without a
-populated `static/`, and the wheel should contain
+There is no pre-merge CI gate any more. `just build` prepares `static/` before packaging, and the wheel should contain
 `pdomain_ocr_labeler_spa/static/index.html`. Check it before releasing:
 
 ```bash
-make frontend-build && make build
+just frontend-build && just build
 unzip -l dist/*.whl | grep static/index.html
 ```
 

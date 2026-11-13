@@ -32,7 +32,7 @@ FRONTEND="$REPO_ROOT/frontend"
 say() { echo "[local-frontend-test] $*"; }
 
 if [[ ! -f "$MARKER" ]]; then
-  echo "ERROR: not in local-dev mode. Run 'make local-dev' first." >&2
+  echo "ERROR: not in local-dev mode. Run 'just local-dev' first." >&2
   exit 1
 fi
 
@@ -42,7 +42,7 @@ if [[ ! -d "$FRONTEND" ]]; then
 fi
 
 if [[ ! -d "$SIBLING" ]]; then
-  echo "ERROR: missing sibling repo: $SIBLING (run 'make local-setup')." >&2
+  echo "ERROR: missing sibling repo: $SIBLING (run 'just local-setup')." >&2
   exit 1
 fi
 
@@ -53,7 +53,7 @@ run_pnpm() {
   elif command -v pnpm >/dev/null 2>&1; then
     (cd "$FRONTEND" && pnpm "$@")
   else
-    echo "no pnpm/mise available. Run 'make mise-setup' or install Node." >&2
+    echo "no pnpm/mise available. Run 'just mise-setup' or install Node." >&2
     exit 1
   fi
 }

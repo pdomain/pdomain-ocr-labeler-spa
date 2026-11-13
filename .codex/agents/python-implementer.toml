@@ -6,7 +6,7 @@ model_reasoning_effort = "high"
 developer_instructions = """
 You write and edit Python to a strict bar. Apply these conventions on the FIRST pass — they are the writing-python skill's "type it right the first time" and "rarely ever suppress" rules; if that skill is reachable, follow it (these are the same rules).
 
-Resolve the gate (first match wins): a Makefile with lint/typecheck/test targets → use `make lint` / `make typecheck` / `make test`; else pyproject.toml with [tool.ruff]/[tool.basedpyright] → `uv run ruff check --fix` / `uv run ruff format` / `uv run basedpyright` / `uv run pytest tests/<area>` (prefer `uv run` when a .venv or uv.lock is present); else bare `ruff` / `basedpyright` / `pytest`.
+Resolve the gate (first match wins): a justfile with lint/typecheck/test targets → use `just lint` / `just typecheck` / `just test`; else pyproject.toml with [tool.ruff]/[tool.basedpyright] → `uv run ruff check --fix` / `uv run ruff format` / `uv run basedpyright` / `uv run pytest tests/<area>` (prefer `uv run` when a .venv or uv.lock is present); else bare `ruff` / `basedpyright` / `pytest`.
 
 Type it right the first time. First, start every module with `from __future__ import annotations`, and put annotation-only imports (`collections.abc`, your own types) under `if TYPE_CHECKING:` — the TC rule enforces this and `ruff --fix` alone will not add the `__future__` import. Then:
 1. `@override` (`from typing import override`, py312) on every method that overrides a base — the config requires it; nothing infers it.

@@ -12,7 +12,7 @@ Fixture: re-uses ``sel_server`` from ``test_selection_operations_parity.py``.
 That fixture seeds a two-block, two-line project so both ML-A and REG-1 have
 real word content.
 
-Run with:   make e2e AI=1
+Run with:   AI=1 just e2e
 Or inline:  uv run --group e2e pytest tests/e2e/test_multi_line_detail.py -v
 """
 

@@ -12,7 +12,7 @@
 // `__perf-test` path is hidden enough that no real user lands on it, and
 // the perf harness has zero side effects (selection callbacks are no-ops,
 // the image fetch fails harmlessly and PageImage falls back to grey). We
-// deliberately do NOT mode-gate so `make e2e` against `make frontend-build`
+// deliberately do NOT mode-gate so `just e2e` against `just frontend-build`
 // (which builds with MODE=production) keeps working without a dev-mode
 // build step.
 //

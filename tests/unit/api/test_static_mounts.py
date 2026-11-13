@@ -12,7 +12,7 @@ The SPA fallback serves ``index.html`` for any unknown route under
 ``/api/*`` or other reserved prefixes; those must keep their normal
 404 behaviour so backend bugs aren't masked. We pin both branches.
 
-When the SPA bundle is missing (M0/dev mode — no ``make
+When the SPA bundle is missing (M0/dev mode — no ``just
 frontend-build`` yet), the catch-all 404s with a helpful message
 rather than crashing on a missing ``index.html``.
 """
@@ -261,8 +261,8 @@ def spa_dir() -> Iterator[Path]:
     don't get the as-checked-in state (just ``.gitkeep``).
 
     Teardown preserves a pre-existing real ``index.html`` (written by
-    ``make frontend-build``) so ``make ci-slow`` does not lose the
-    bundle after ``make test`` runs.  Without this, the ``spa_dir``
+    ``just frontend-build``) so ``just ci-slow`` does not lose the
+    bundle after ``just test`` runs.  Without this, the ``spa_dir``
     cleanup removes whatever ``index.html`` was present — including the
     real bundle — which causes the subsequent ``uv build --wheel`` step
     to fail the SPA-present guard in ``build_hooks/spa_check.py``.
@@ -272,7 +272,7 @@ def spa_dir() -> Iterator[Path]:
     static_dir = Path(pkg.__file__).parent / "static"
     index_file = static_dir / "index.html"
     # Snapshot the original bytes (None when file was absent, e.g. on a
-    # fresh checkout before ``make frontend-build`` has been run).
+    # fresh checkout before ``just frontend-build`` has been run).
     original_content: bytes | None = index_file.read_bytes() if index_file.exists() else None
 
     _populate_static_dir()
@@ -294,7 +294,7 @@ def test_spa_fallback_serves_index_for_unknown_route(
 
     Uses ``monkeypatch`` + ``tmp_path`` to isolate ``_resolve_static_dir``
     from the real ``static/`` dir so the test is hermetic regardless of
-    whether ``make frontend-build`` has been run (ci-slow builds the
+    whether ``just frontend-build`` has been run (ci-slow builds the
     frontend before running tests; the previous ``spa_dir`` fixture wrote
     a stub to the real ``static/`` but was then compared against what the
     server served, which could be the real built index.html if the Path
@@ -338,7 +338,7 @@ def test_spa_index_html_sets_no_store_cache_control(settings: Settings, spa_dir:
 
     The shell's filename is stable across builds; only its contents
     change. Browsers default to heuristic caching for HTML, so without
-    an explicit no-store header a developer's ``make frontend-build``
+    an explicit no-store header a developer's ``just frontend-build``
     + reload may serve the OLD shell from disk cache — which then
     points at hash-named assets that no longer exist on disk (404
     storm). Asset passthrough at ``/assets/<hash>.js`` is content-
@@ -359,7 +359,7 @@ def _write_test_asset(spa_dir: Path, filename: str, content: bytes) -> Path:
     """Write ``spa_dir/assets/<filename>`` with ``content``; return path.
 
     B-72: ``assets/`` may *already* hold a real frontend bundle from a
-    prior ``make frontend-build``. We therefore (1) create the dir
+    prior ``just frontend-build``. We therefore (1) create the dir
     idempotently, (2) refuse to overwrite a pre-existing entry under
     the same name (would mask a real bundle file), and (3) leave the
     dir intact on teardown — only the test's own file is removed.
@@ -432,7 +432,7 @@ def test_b72_test_isolation_does_not_mutate_real_static_assets(spa_dir: Path) ->
     above), then walks the dir again and asserts the same set survives.
     If the B-72 fix regresses (someone re-introduces an unconditional
     ``rmdir`` or ``unlink`` in teardown), this fixture goes red on a
-    tree where ``make frontend-build`` has run.
+    tree where ``just frontend-build`` has run.
 
     On a clean tree (no bundle), this test is a no-op assertion that
     the dir is either absent or empty — still a useful invariant.
@@ -516,15 +516,15 @@ def test_spa_fallback_503_when_dist_missing(settings: Settings, monkeypatch: pyt
 
     503 (Service Unavailable) distinguishes "SPA not built" from
     "route not found" (404), enabling deployment diagnostics to
-    detect a missing ``make frontend-build`` step explicitly.
+    detect a missing ``just frontend-build`` step explicitly.
 
     The error message names the missing dir + the build target so
     a developer iterating on the backend without a built SPA gets a
     pointer to the fix instead of an opaque ``FileNotFoundError``.
 
     ``monkeypatch`` is used instead of a real-dir precondition so the
-    test passes regardless of whether ``make frontend-build`` has
-    populated ``static/`` — making ``make ci-slow`` green end-to-end.
+    test passes regardless of whether ``just frontend-build`` has
+    populated ``static/`` — making ``just ci-slow`` green end-to-end.
     """
     import pdomain_ocr_labeler_spa.api.static_mounts as sm
 
@@ -730,7 +730,7 @@ def test_resolve_static_dir_handles_non_path_traversable() -> None:
     legacy ``.egg``s) it's a ``MultiplexedPath`` / ``ZipPath`` — and
     ``Path(str(zippath))`` produces a meaningless string like
     ``<MultiplexedPath object at 0x…>`` whose ``.is_dir()`` is False.
-    The result is "404 — run make frontend-build" for a wheel that
+    The result is "404 — run just frontend-build" for a wheel that
     DOES ship the bundle, with no diagnostic.
 
     We monkeypatch ``importlib.resources.files`` to return a fake

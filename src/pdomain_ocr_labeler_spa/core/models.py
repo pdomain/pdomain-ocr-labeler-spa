@@ -7,7 +7,7 @@ Spec authority:
   Protocols AND the wire (no separate DTO layer).
 
 Adding new models: append; never reorder. Generated TS via
-``make openapi-export`` keys on field name + position.
+``just openapi-export`` keys on field name + position.
 """
 
 from __future__ import annotations

@@ -1,11 +1,11 @@
 """Tests for deployment scaffold — issue #250.
 
 Covers the five acceptance bullets:
-  1. `make setup` invokes uv sync + pre-commit install
-  2. `make lint` includes ruff, eslint, and tsc --noEmit
+  1. `just setup` invokes uv sync + pre-commit install
+  2. `just lint` includes ruff, eslint, and tsc --noEmit
   3. `upgrade-deps` refuses-with-message when dev-local detected
   4. `upgrade-deps-local` recipe writes the .pdomain-dev-local marker
-  5. `make build` (via spa_check.py) raises when static/index.html absent
+  5. `just build` (via spa_check.py) raises when static/index.html absent
 """
 
 from __future__ import annotations
@@ -21,24 +21,23 @@ import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 # uv installs into UV_PROJECT_ENVIRONMENT when set and into .venv otherwise,
-# and the Makefile guard resolves the marker the same way. Reading the real
+# and the justfile guard resolves the marker the same way. Reading the real
 # rule here keeps the test honest inside the devcontainer, which names the
 # environment ".venv-container".
 PROJECT_VENV = REPO_ROOT / (os.environ.get("UV_PROJECT_ENVIRONMENT") or ".venv")
-MAKEFILE = REPO_ROOT / "Makefile"
 JUSTFILE = REPO_ROOT / "justfile"
 
 
-def _have_make() -> bool:
-    return shutil.which("make") is not None
+def _have_just() -> bool:
+    return shutil.which("just") is not None
 
 
 # ---------------------------------------------------------------------------
-# Bullet 1: make setup
+# Bullet 1: just setup
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.skipif(not _have_make(), reason="`make` not on PATH")
+@pytest.mark.skipif(not _have_just(), reason="`just` not on PATH")
 def test_makefile_setup_invokes_uv_sync() -> None:
     """`just --show setup` must include a `uv sync` invocation."""
     result = subprocess.run(
@@ -51,7 +50,7 @@ def test_makefile_setup_invokes_uv_sync() -> None:
     assert "uv sync" in result.stdout, f"`just --show setup` missing `uv sync`:\n{result.stdout}"
 
 
-@pytest.mark.skipif(not _have_make(), reason="`make` not on PATH")
+@pytest.mark.skipif(not _have_just(), reason="`just` not on PATH")
 def test_makefile_setup_invokes_pre_commit_install() -> None:
     """`just --show setup` must install pre-commit hooks."""
     assert "install-hooks" in subprocess.check_output(
@@ -70,11 +69,11 @@ def test_makefile_setup_invokes_pre_commit_install() -> None:
 
 
 # ---------------------------------------------------------------------------
-# Bullet 2: make lint includes ruff + eslint + tsc --noEmit
+# Bullet 2: just lint includes ruff + eslint + tsc --noEmit
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.skipif(not _have_make(), reason="`make` not on PATH")
+@pytest.mark.skipif(not _have_just(), reason="`just` not on PATH")
 def test_makefile_lint_includes_ruff() -> None:
     """`just --show lint` must invoke ruff."""
     result = subprocess.run(
@@ -87,7 +86,7 @@ def test_makefile_lint_includes_ruff() -> None:
     assert "ruff" in result.stdout, f"`just --show lint` missing ruff:\n{result.stdout}"
 
 
-@pytest.mark.skipif(not _have_make(), reason="`make` not on PATH")
+@pytest.mark.skipif(not _have_just(), reason="`just` not on PATH")
 def test_makefile_lint_includes_eslint() -> None:
     """`just --show frontend-lint` must invoke eslint (via npm run lint or direct call)."""
     result = subprocess.run(
@@ -102,7 +101,7 @@ def test_makefile_lint_includes_eslint() -> None:
     )
 
 
-@pytest.mark.skipif(not _have_make(), reason="`make` not on PATH")
+@pytest.mark.skipif(not _have_just(), reason="`just` not on PATH")
 def test_makefile_lint_includes_tsc_no_emit() -> None:
     """`just --show frontend-typecheck` must invoke tsc (typecheck / --noEmit)."""
     result = subprocess.run(
@@ -122,86 +121,59 @@ def test_makefile_lint_includes_tsc_no_emit() -> None:
 # ---------------------------------------------------------------------------
 
 
-def _all_phony_tokens(text: str) -> set[str]:
-    """Return all tokens declared in any .PHONY: block in *text*.
-
-    The Makefile has two .PHONY declarations: one inside the AI-wrapper
-    ``ifdef`` block (``$(_goals)``) and one in the ``else`` branch with
-    the real target list.  Collecting both ensures tests see the full set.
-    """
-    declared: set[str] = set()
-    phony_block: list[str] = []
-    in_block = False
-    for line in text.splitlines():
-        if line.startswith(".PHONY:"):
-            in_block = True
-            phony_block = [line[len(".PHONY:") :]]
-            continue
-        if in_block:
-            if line.endswith("\\") or line.startswith((" ", "\t")):
-                phony_block.append(line)
-                if not line.rstrip().endswith("\\"):
-                    for chunk in phony_block:
-                        for tok in chunk.replace("\\", " ").split():
-                            declared.add(tok)
-                    phony_block = []
-                    in_block = False
-            else:
-                for chunk in phony_block:
-                    for tok in chunk.replace("\\", " ").split():
-                        declared.add(tok)
-                phony_block = []
-                in_block = False
-    for chunk in phony_block:
-        for tok in chunk.replace("\\", " ").split():
-            declared.add(tok)
-    return declared
+def _all_recipes() -> set[str]:
+    return set(
+        subprocess.check_output(
+            ["just", "--justfile", str(JUSTFILE), "--summary"],
+            text=True,
+        ).split()
+    )
 
 
-def test_upgrade_deps_declared_phony() -> None:
-    """upgrade-deps must be declared in .PHONY."""
-    text = MAKEFILE.read_text()
-    assert "upgrade-deps" in text, "upgrade-deps target missing from Makefile"
-    assert "upgrade-deps" in _all_phony_tokens(text), "upgrade-deps missing from .PHONY block"
+def test_upgrade_deps_recipe_is_public() -> None:
+    """upgrade-deps must be declared in public recipes."""
+    text = JUSTFILE.read_text()
+    assert "upgrade-deps" in text, "upgrade-deps target missing from justfile"
+    assert "upgrade-deps" in _all_recipes(), "upgrade-deps missing from public recipe list"
 
 
-@pytest.mark.skipif(not _have_make(), reason="`make` not on PATH")
+@pytest.mark.skipif(not _have_just(), reason="`just` not on PATH")
 def test_upgrade_deps_refuses_when_pd_dev_local_set() -> None:
-    """`make upgrade-deps` must exit non-zero and print a refusal message
+    """`just upgrade-deps` must exit non-zero and print a refusal message
     when PDOMAIN_DEV_LOCAL=1 is set in the environment (probe 3 of 3)."""
     result = subprocess.run(
-        ["make", "-C", str(REPO_ROOT), "upgrade-deps"],
+        ["just", "--justfile", str(JUSTFILE), "upgrade-deps"],
         capture_output=True,
         text=True,
         timeout=30,
         env={**__import__("os").environ, "PDOMAIN_DEV_LOCAL": "1"},
     )
     assert result.returncode != 0, (
-        f"`make upgrade-deps` should exit non-zero when PDOMAIN_DEV_LOCAL=1 "
+        f"`just upgrade-deps` should exit non-zero when PDOMAIN_DEV_LOCAL=1 "
         f"(exited {result.returncode}):\n{result.stdout}"
     )
     combined = result.stdout + result.stderr
     assert "upgrade-deps-local" in combined or "dev-local" in combined.lower(), (
-        f"`make upgrade-deps` refusal message must mention `upgrade-deps-local` or 'dev-local':\n{combined}"
+        f"`just upgrade-deps` refusal message must mention `upgrade-deps-local` or 'dev-local':\n{combined}"
     )
 
 
-@pytest.mark.skipif(not _have_make(), reason="`make` not on PATH")
+@pytest.mark.skipif(not _have_just(), reason="`just` not on PATH")
 def test_upgrade_deps_refuses_when_marker_present() -> None:
-    """`make upgrade-deps` must exit non-zero and print a refusal message
+    """`just upgrade-deps` must exit non-zero and print a refusal message
     when the .pdomain-dev-local marker exists (probe 2 of 3)."""
     marker = PROJECT_VENV / ".pdomain-dev-local"
     marker.parent.mkdir(parents=True, exist_ok=True)
     marker.touch()
     try:
         result = subprocess.run(
-            ["make", "-C", str(REPO_ROOT), "upgrade-deps"],
+            ["just", "--justfile", str(JUSTFILE), "upgrade-deps"],
             capture_output=True,
             text=True,
             timeout=30,
         )
         assert result.returncode != 0, (
-            f"`make upgrade-deps` should exit non-zero when {marker} exists "
+            f"`just upgrade-deps` should exit non-zero when {marker} exists "
             f"(exited {result.returncode}):\n{result.stdout}"
         )
         combined = result.stdout + result.stderr
@@ -217,11 +189,11 @@ def test_upgrade_deps_refuses_when_marker_present() -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_upgrade_deps_local_declared_phony() -> None:
-    """upgrade-deps-local must be declared in .PHONY."""
-    text = MAKEFILE.read_text()
-    assert "upgrade-deps-local" in text, "upgrade-deps-local target missing from Makefile"
-    assert "upgrade-deps-local" in _all_phony_tokens(text), "upgrade-deps-local missing from .PHONY block"
+def test_upgrade_deps_local_recipe_is_public() -> None:
+    """upgrade-deps-local must be declared in public recipes."""
+    text = JUSTFILE.read_text()
+    assert "upgrade-deps-local" in text, "upgrade-deps-local target missing from justfile"
+    assert "upgrade-deps-local" in _all_recipes(), "upgrade-deps-local missing from public recipe list"
 
 
 def test_upgrade_deps_local_recipe_writes_pd_dev_local_marker() -> None:
@@ -229,12 +201,12 @@ def test_upgrade_deps_local_recipe_writes_pd_dev_local_marker() -> None:
     the .pdomain-dev-local marker file."""
     text = JUSTFILE.read_text()
     assert ".pdomain-dev-local" in text, (
-        "Makefile upgrade-deps-local recipe must write the .pdomain-dev-local marker"
+        "justfile upgrade-deps-local recipe must write the .pdomain-dev-local marker"
     )
 
 
 # ---------------------------------------------------------------------------
-# Bullet 5: make build raises when static/index.html absent
+# Bullet 5: just build raises when static/index.html absent
 # ---------------------------------------------------------------------------
 
 
@@ -321,7 +293,7 @@ def test_frontend_package_json_has_lint_script() -> None:
     data = json.loads(pkg.read_text())
     scripts = data.get("scripts", {})
     assert "lint" in scripts, (
-        "frontend/package.json missing `lint` script (needed for `make lint` to run eslint)"
+        "frontend/package.json missing `lint` script (needed for `just lint` to run eslint)"
     )
 
 
@@ -333,7 +305,7 @@ def test_frontend_package_json_has_typecheck_script() -> None:
     data = json.loads(pkg.read_text())
     scripts = data.get("scripts", {})
     assert "typecheck" in scripts, (
-        "frontend/package.json missing `typecheck` script (needed for `make lint` tsc --noEmit)"
+        "frontend/package.json missing `typecheck` script (needed for `just lint` tsc --noEmit)"
     )
 
 

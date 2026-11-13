@@ -97,7 +97,7 @@ def render_markdown(report: Report) -> str:
         "",
         "# Behavior coverage (generated - do not edit)",
         "",
-        "Run `make behavior-coverage` to regenerate.",
+        "Run `just behavior-coverage` to regenerate.",
         "",
         "| ID | Regression | Status |",
         "|----|------------|--------|",

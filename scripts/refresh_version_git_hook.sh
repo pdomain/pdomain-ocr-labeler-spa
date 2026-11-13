@@ -11,7 +11,7 @@
 #                     `git cherry-pick` if it leaves HEAD on a different
 #                     sha. Also runs after `git clone`.
 #
-# All three converge on `make refresh-version` so a contributor never
+# All three converge on `just refresh-version` so a contributor never
 # has to remember which git op invalidates the editable install. See
 # B-17 in `docs/BUGS_FOUND.md` for context — without post-rewrite +
 # post-checkout, the post-commit hook silently no-ops on rebase/amend
@@ -19,7 +19,7 @@
 #
 # Failure mode is intentionally non-fatal — pre-commit hooks should
 # never block a checkout or refuse a rebase because of a missing
-# toolchain. `make refresh-version` itself absorbs missing-uv errors.
+# toolchain. `just refresh-version` itself absorbs missing-uv errors.
 
 set -u
 
@@ -39,10 +39,10 @@ cd "${REPO_ROOT}" || exit 0
 # them so the hook stays compatible if pre-commit changes its
 # convention.
 
-if command -v make >/dev/null 2>&1; then
-    make --no-print-directory refresh-version || true
+if command -v just >/dev/null 2>&1; then
+    just --quiet refresh-version || true
 else
-    echo "[refresh_version_git_hook] make not on PATH; skipping refresh." >&2
+    echo "[refresh_version_git_hook] just not on PATH; skipping refresh." >&2
 fi
 
 exit 0

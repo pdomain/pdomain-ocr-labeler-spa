@@ -3,7 +3,7 @@
 The B-20 fix moved lockfile-drift detection into `docker build` (the
 wheel stage runs `uv export --frozen …`). That's the right fail-mode
 architecturally but it only fires inside docker, which neither
-`make ci` nor `make test` invokes. Without a separate gate, M1+
+`just ci` nor `just test` invokes. Without a separate gate, M1+
 contributors who add a new dep to `pyproject.toml` without running
 `uv lock` would pass all tests and ruff and only learn about the
 drift when the release pipeline actually builds an image.
@@ -16,7 +16,7 @@ This module pins two invariants:
 2. The repo's *current* lockfile passes `uv lock --check`, so that
    any commit that introduces drift (whether via the hook firing or
    not — e.g. a CI run on a PR opened from a branch where the
-   contributor disabled hooks) is caught by `make test`.
+   contributor disabled hooks) is caught by `just test`.
 
 Both pieces matter: the hook gate stops drift from landing locally;
 the runtime check stops drift from landing in the repo at all.
@@ -72,7 +72,7 @@ def test_pre_commit_config_carries_uv_lock_check_hook() -> None:
         f"modifying the lockfile."
     )
     assert hook.get("language") == "system", (
-        "uv-lock-check must run via the system `uv` (the one `make setup` "
+        "uv-lock-check must run via the system `uv` (the one `just setup` "
         "ensured is on PATH); pre-commit's isolated venvs would not have it."
     )
     assert hook.get("pass_filenames") is False, (
@@ -105,7 +105,7 @@ def test_uv_lock_is_in_sync_with_pyproject() -> None:
 
     Belt-and-suspenders to the pre-commit hook: even if a contributor
     bypasses hooks (`git commit --no-verify`) or pushes from a fork
-    that lacks them, `make test` still catches the drift. Skipped
+    that lacks them, `just test` still catches the drift. Skipped
     when `uv` is absent so a stripped CI image doesn't fail with a
     tooling error masquerading as a drift error.
     """

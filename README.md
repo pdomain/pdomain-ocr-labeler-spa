@@ -70,7 +70,7 @@ same `pd_ocr_labeler.user_page` v2.1 envelope (see
 ```
 pdomain-ocr-labeler-spa/
 ├── pyproject.toml                 # hatchling + uv, console scripts
-├── Makefile                       # setup / test / frontend-build / build
+├── justfile                       # setup / test / frontend-build / build
 ├── mise.toml                      # pinned Node 24 / Python 3.13
 ├── Dockerfile                     # two-stage: Node build → Python wheel
 ├── install.sh / install.ps1       # GitHub-Release wheel installer
@@ -84,7 +84,7 @@ pdomain-ocr-labeler-spa/
 │   ├── api/                       # FastAPI routers
 │   ├── adapters/                  # storage / auth / ocr backends
 │   ├── core/                      # domain models, services, persistence
-│   └── static/                    # populated by `make frontend-build`
+│   └── static/                    # populated by `just frontend-build`
 ├── frontend/
 │   ├── package.json
 │   ├── vite.config.ts             # proxy /api + /image-cache → backend
@@ -156,11 +156,11 @@ Specs are split into two trees as of 2026-05-14:
 ## Quick start (just run the labeler)
 
 ```bash
-make setup     # one-time: sync deps + install pre-commit hooks
-make run       # builds the SPA if missing, then serves via FastAPI
+just setup     # one-time: sync deps + install pre-commit hooks
+just run       # builds the SPA if missing, then serves via FastAPI
 ```
 
-`make run` is the single-command "I just want to use it" target — it
+`just run` is the single-command "I just want to use it" target — it
 builds the SPA bundle into `src/pdomain_ocr_labeler_spa/static/` if it
 doesn't exist yet, then launches `pdomain-ocr-labeler-ui` (no `--reload`,
 no Vite). At startup the server prints a one-line `device: …` banner
@@ -169,8 +169,8 @@ whether torch picked up the local GPU before kicking off OCR. The
 default URL is <http://127.0.0.1:8080> and a browser tab opens
 automatically once the listener is up.
 
-To force a fresh frontend bundle, run `make frontend-build` before
-`make run`. For frontend hacking (Vite HMR on :5173) use `make dev`
+To force a fresh frontend bundle, run `just frontend-build` before
+`just run`. For frontend hacking (Vite HMR on :5173) use `just dev`
 instead.
 
 ## Where to start

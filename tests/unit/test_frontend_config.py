@@ -1,7 +1,7 @@
 """Smoke tests for ``frontend/`` config files.
 
 Pin the iter-8 fixes for B-05 (dangling eslint lint script), B-06
-(openapi-gen path drift between Makefile / package.json / spec) and
+(openapi-gen path drift between justfile / package.json / spec) and
 B-08 (production tsconfig leaking test files into ``tsc -b`` build).
 
 These are text/JSON-grep tests — same shape as ``test_vite_config.py``,
@@ -26,7 +26,7 @@ TSCONFIG_TEST = FRONTEND / "tsconfig.test.json"
 VITEST_CONFIG = FRONTEND / "vitest.config.ts"
 JUSTFILE = REPO_ROOT / "justfile"
 
-# Canonical openapi-typescript output path, repeated by Makefile +
+# Canonical openapi-typescript output path, repeated by justfile +
 # package.json + spec. Source of truth: ``docs/architecture/01-data-models.md:712``
 # ("openapi-typescript openapi.json -o src/api/types.ts" — relative to
 # ``frontend/``) and ``docs/architecture/15-deployment-dev.md:127`` ("writes
@@ -73,7 +73,7 @@ def test_package_json_does_not_declare_unrunnable_eslint_script() -> None:
 
 def test_openapi_gen_path_is_consistent_across_makefile_and_package_json() -> None:
     """B-06: ``frontend/package.json`` had ``../openapi.json`` while
-    Makefile writes ``frontend/openapi.json`` and reads
+    justfile writes ``frontend/openapi.json`` and reads
     ``openapi.json`` from inside ``frontend/``. After fix, both must
     consume the same path (``openapi.json`` relative to ``frontend/``)
     and emit to the same ``src/api/types.ts``.
@@ -83,7 +83,7 @@ def test_openapi_gen_path_is_consistent_across_makefile_and_package_json() -> No
     # Must read from frontend-local openapi.json (NOT ../openapi.json).
     assert "../openapi.json" not in openapi_script, (
         "package.json openapi:gen still reads ../openapi.json "
-        "(B-06 regression — Makefile writes frontend/openapi.json)."
+        "(B-06 regression — justfile writes frontend/openapi.json)."
     )
     assert " openapi.json " in f" {openapi_script} ", (
         f"package.json openapi:gen must read `openapi.json` (frontend-local); got: {openapi_script!r}"
@@ -100,13 +100,13 @@ def test_openapi_gen_path_is_consistent_across_makefile_and_package_json() -> No
     )
     assert result.returncode == 0, result.stderr
     makefile_text = result.stdout
-    # Makefile writes the schema to frontend/openapi.json and runs
+    # justfile writes the schema to frontend/openapi.json and runs
     # openapi-typescript with the same EXPECTED_TS_TYPES output.
     assert "frontend/openapi.json" in makefile_text, (
-        "Makefile no longer writes frontend/openapi.json (B-06 canonical path drift)."
+        "justfile no longer writes frontend/openapi.json (B-06 canonical path drift)."
     )
     assert f"-o {EXPECTED_TS_TYPES}" in makefile_text, (
-        f"Makefile openapi-export must emit -o {EXPECTED_TS_TYPES}; canonical path drift."
+        f"justfile openapi-export must emit -o {EXPECTED_TS_TYPES}; canonical path drift."
     )
 
     # Spec keeps the same canonical path — guards against the spec

@@ -36,7 +36,7 @@ Before executing any phase, the following conditions must be satisfied.
 
 ### P0.1 — Server running
 
-**Action.** In a terminal: `make dev` (or `make run` for production-style).
+**Action.** In a terminal: `just dev` (or `just run` for production-style).
 
 **Expected.** Terminal shows `Uvicorn running on http://127.0.0.1:8000`. Vite
 dev server starts on `:5173` and proxies `/api` and `/image-cache` to FastAPI.

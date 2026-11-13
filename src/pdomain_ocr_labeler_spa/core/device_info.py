@@ -1,7 +1,7 @@
 """Resolve and render the torch device DocTR / pdomain_book_tools will use.
 
 Used by ``__main__.main`` to print a single startup line so users running
-``make run`` (or any direct ``pdomain-ocr-labeler-ui`` invocation) can see
+``just run`` (or any direct ``pdomain-ocr-labeler-ui`` invocation) can see
 whether torch picked up the local GPU before they kick off a real OCR
 pass.
 
