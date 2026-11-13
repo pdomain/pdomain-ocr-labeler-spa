@@ -118,12 +118,14 @@ from pdomain_pgdp_measure.profiling import profile_page
 
 from ....settings import Settings
 from ...automation.service import AutomationService
+from ...exchange_models import record_page_region_exchange
 from ...labeler_sidecars import LegacyTypographyPayloadError
 from ...notifications import NotificationKind, NotificationQueue
 from ...page_kind.proposal_log import PageKindProposalLog
 from ...page_kind.reviewed_store import PageKindReviewedStore
 from ...page_measurement import measure_book
 from ...page_state import ensure_page_model
+from ...persistence.page_store import LabelerPageStore
 from ...project_state import PageState, ProjectState
 from ...regions.block_adapter import (
     HAND_DRAWN_SENTINEL,
@@ -155,7 +157,6 @@ if TYPE_CHECKING:
     from ...page_kind.models import PageKindProposalRun
     from ...page_measurement import MeasuredBook, MeasurePageFn
     from ...page_state import PageLoader
-    from ...persistence.page_store import LabelerPageStore
     from ...regions.detector import DetectedRegion, RegionDetector
     from ...regions.models import ResolvedRegion
     from ..runner import Job, JobRunner
@@ -720,6 +721,32 @@ def _book_fit_inputs(
     return inputs
 
 
+def _record_exchange_region_runs(
+    page_store: LabelerPageStore | None,
+    project_state: ProjectState,
+    eligible_indices: list[int],
+    run: ProposalRun,
+) -> None:
+    """Stamp the persisted proposal run's model onto pages that already have OCR."""
+    if not isinstance(page_store, LabelerPageStore):
+        return
+    page_ids: list[uuid.UUID] = []
+    for index in eligible_indices:
+        page_id = project_state.page_states[index].page_id
+        if isinstance(page_id, uuid.UUID):
+            page_ids.append(page_id)
+    if not page_ids:
+        return
+    record_page_region_exchange(
+        page_store,
+        page_ids,
+        model_id=run.model_id,
+        model_version=run.model_version,
+        depends_on=tuple(sorted(run.depends_on)),
+        run_id=run.run_id,
+    )
+
+
 async def handle_propose_regions(runner: JobRunner, job: Job) -> None:
     project_state, page_store = _get_required_context(runner)
     automation: object = runner.context.get("automation")
@@ -1010,6 +1037,7 @@ async def handle_propose_regions(runner: JobRunner, job: Job) -> None:
         if project_state.loaded_project is not project or runner.is_cancelled(job.job_id):
             return
         proposal_log.append_run(run)
+        _record_exchange_region_runs(page_store, project_state, eligible_indices, run)
         if broker is not None:
             _ = broker.publish("project_changed", project_id=project.project_id)
 

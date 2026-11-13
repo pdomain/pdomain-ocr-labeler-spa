@@ -16,6 +16,7 @@ from pydantic import ValidationError
 
 from ..exceptions import UnsupportedRuntimeError
 from ..models import Project
+from .labeling_contract import require_pinned_labeling_bundle
 
 _F_ADD_SEALS = 1033
 _F_SEAL_SEAL = 0x0001
@@ -164,6 +165,7 @@ def load_labeling_bundle_directory(root: Path) -> LoadedLabelingBundle:
         bundle_payload = _read_regular_at(root_descriptor, ("labeling-bundle.json",))
         try:
             bundle = LabelingBundle.model_validate_json(bundle_payload)
+            require_pinned_labeling_bundle(bundle)
         except ValidationError as exc:
             raise ValueError("invalid labeling bundle") from exc
         artifact_root_descriptor = os.open(

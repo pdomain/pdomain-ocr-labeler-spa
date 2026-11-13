@@ -34,7 +34,15 @@ from pdomain_book_tools.typography import (
 )
 from pydantic import BaseModel, ConfigDict, Field, RootModel, ValidationError
 
+from ..core.exchange_models import (
+    ExchangePart,
+    build_immutable_correction_bundle,
+    fold_exchange_history,
+    merge_recorded_runs,
+    recorded_run_artifacts,
+)
 from ..core.models import Project
+from ..core.persistence.page_store import LabelerPageStore
 from ..core.project_state import ProjectState
 from ..core.typography_review import (
     ImportedTextBinding,
@@ -51,7 +59,7 @@ from ..core.typography_review import (
 )
 from ..core.typography_review_counts import append_typography_review_counts_best_effort
 from ..core.word_identity import identity_reading_order
-from .dependencies import bind_page_labeling_lease, get_project_state
+from .dependencies import bind_page_labeling_lease, get_page_store_optional, get_project_state
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
@@ -1164,19 +1172,35 @@ def append_typography_correction(
                 *(record.correction for record in records),
                 correction,
             )
+            folded = fold_exchange_history(
+                (
+                    *(_exchange_part(record) for record in records),
+                    ExchangePart(
+                        page_geometry=submission.page_geometry,
+                        geometry=submission.geometry,
+                        model_runs=submission.model_runs,
+                        coordinate_transforms=submission.coordinate_transforms,
+                        replacement_artifacts=replacement_artifacts,
+                    ),
+                )
+            )
             _ = CorrectionBundle(
                 schema_version=REVIEW_CONTRACT_VERSION,
                 configuration_hash="0" * 64,
                 labeling_bundle_id="0" * 64,
                 corrections=correction_history,
-                replacement_artifacts=replacement_artifacts,
-                page_geometry=submission.page_geometry,
-                geometry=submission.geometry,
-                model_runs=submission.model_runs,
-                coordinate_transforms=submission.coordinate_transforms,
+                replacement_artifacts=folded.replacement_artifacts,
+                page_geometry=folded.page_geometry,
+                geometry=folded.geometry,
+                model_runs=folded.model_runs,
+                coordinate_transforms=folded.coordinate_transforms,
             )
         except ValidationError as exc:
             raise HTTPException(status_code=422, detail="invalid portable correction components") from exc
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=422, detail="conflicting replacement artifact provenance"
+            ) from exc
         artifacts_by_id = {artifact.artifact_id: artifact for artifact in replacement_artifacts}
         if len(artifacts_by_id) != len(replacement_artifacts):
             raise HTTPException(status_code=422, detail="replacement artifact ids must be unique")
@@ -1498,6 +1522,16 @@ def get_typography_worklist(
     )
 
 
+def _exchange_part(record: TypographyJournalEnvelope) -> ExchangePart:
+    return ExchangePart(
+        page_geometry=record.page_geometry,
+        geometry=record.geometry,
+        model_runs=record.model_runs,
+        coordinate_transforms=record.coordinate_transforms,
+        replacement_artifacts=record.replacement_artifacts,
+    )
+
+
 @router.post(
     "/api/projects/{project_id}/pages/{page_index}/typography/correction-bundles/export",
     response_model=CorrectionBundleExportResponse,
@@ -1508,6 +1542,7 @@ def export_typography_correction_bundle(
     page_index: int,
     request: CorrectionBundleExportRequest,
     state: ProjectState = Depends(get_project_state),
+    page_store: LabelerPageStore | None = Depends(get_page_store_optional),
 ) -> CorrectionBundleExportResponse:
     """Create one deterministic immutable project-local correction bundle."""
     project = _project_page(project_id, page_index, state)
@@ -1609,29 +1644,44 @@ def export_typography_correction_bundle(
             )
         )
         selected = records[: max(selected_head_positions, default=-1) + 1]
-        artifacts: dict[str, ReplacementArtifact] = {}
-        geometry: dict[str, WordGeometry] = {}
-        model_runs: dict[str, ModelRun] = {}
-        transforms: dict[str, CoordinateTransform] = {}
-        page_geometry: PageGeometry | None = None
-        for record in selected:
-            if record.page_geometry is not None:
-                page_geometry = record.page_geometry
-            for artifact in record.replacement_artifacts:
-                previous_artifact = artifacts.setdefault(artifact.artifact_id, artifact)
-                if previous_artifact != artifact:
-                    raise HTTPException(status_code=422, detail="conflicting replacement artifact provenance")
-            if record.geometry is not None:
-                geometry = {word_geometry.word_id: word_geometry for word_geometry in record.geometry}
-            for model_run in record.model_runs:
-                model_runs[model_run.run_id] = model_run
-            for transform in record.coordinate_transforms:
-                transforms[transform.transform_id] = transform
-        for artifact in artifacts.values():
+        try:
+            folded = fold_exchange_history(tuple(_exchange_part(record) for record in selected))
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=422, detail="conflicting replacement artifact provenance"
+            ) from exc
+        artifacts = {artifact.artifact_id: artifact for artifact in folded.replacement_artifacts}
+        model_runs = {model_run.run_id: model_run for model_run in folded.model_runs}
+        transforms = {transform.transform_id: transform for transform in folded.coordinate_transforms}
+        payloads: dict[str, bytes] = {}
+        page_state = state.get_page_state(page_index)
+        aggregate_page_id = None if page_state is None else page_state.page_id
+        if page_store is not None and aggregate_page_id is not None:
+            recorded_runs, recorded_payloads = recorded_run_artifacts(page_store, aggregate_page_id)
             try:
-                payload = log.read_artifact(artifact.sha256)
-            except (OSError, ValueError) as exc:
-                raise HTTPException(status_code=422, detail="replacement artifact is unavailable") from exc
+                merge_recorded_runs(
+                    model_runs,
+                    artifacts,
+                    payloads,
+                    recorded_runs,
+                    recorded_payloads,
+                    page_geometry=folded.page_geometry,
+                    coordinate_transforms=tuple(transforms.values()),
+                )
+            except ValueError as exc:
+                raise HTTPException(
+                    status_code=422, detail="conflicting replacement artifact provenance"
+                ) from exc
+        for artifact in artifacts.values():
+            payload = payloads.get(artifact.sha256)
+            if payload is None:
+                try:
+                    payload = log.read_artifact(artifact.sha256)
+                except (OSError, ValueError) as exc:
+                    raise HTTPException(
+                        status_code=422, detail="replacement artifact is unavailable"
+                    ) from exc
+                payloads[artifact.sha256] = payload
             if len(payload) != artifact.byte_size:
                 raise HTTPException(status_code=422, detail="replacement artifact size mismatch")
         try:
@@ -1642,14 +1692,13 @@ def export_typography_correction_bundle(
                 artifact.model_copy(update={"relative_path": f"{artifact.sha256}.artifact"})
                 for artifact in artifacts.values()
             )
-            bundle = CorrectionBundle(
-                schema_version=REVIEW_CONTRACT_VERSION,
+            bundle = build_immutable_correction_bundle(
                 configuration_hash=labeling_bundle.configuration_hash,
                 labeling_bundle_id=labeling_bundle_id,
                 corrections=tuple(record.correction for record in selected),
                 replacement_artifacts=exported_artifacts,
-                page_geometry=page_geometry,
-                geometry=tuple(geometry.values()) if geometry else None,
+                page_geometry=folded.page_geometry,
+                geometry=folded.geometry,
                 model_runs=tuple(model_runs.values()),
                 coordinate_transforms=tuple(transforms.values()),
             )
@@ -1665,7 +1714,7 @@ def export_typography_correction_bundle(
         artifact_relative_paths: dict[str, str] = {}
         for artifact in exported_artifacts:
             artifact_name = artifact.relative_path
-            log.publish_export(artifact_name, log.read_artifact(artifact.sha256))
+            log.publish_export(artifact_name, payloads[artifact.sha256])
             artifact_relative_paths[artifact.artifact_id] = (
                 Path(".pd-pages") / "typography-exports" / artifact_name
             ).as_posix()

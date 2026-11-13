@@ -18,6 +18,7 @@ from pydantic import BaseModel, ConfigDict, ValidationError
 
 from .book_labeling_manifest import LoadedBookLabelingManifest
 from .labeling_bundle import LoadedLabelingBundle, require_memfd_sealing
+from .labeling_contract import require_pinned_labeling_bundle
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
@@ -475,6 +476,7 @@ class BookLabelingSession:
     def _load_bundle(self, payload: bytes, page_index: int) -> LabelingBundle:
         try:
             bundle = LabelingBundle.model_validate_json(payload)
+            require_pinned_labeling_bundle(bundle)
         except ValidationError as exc:
             raise ValueError("invalid labeling bundle") from exc
         page = self._loaded_manifest.manifest.pages[page_index]

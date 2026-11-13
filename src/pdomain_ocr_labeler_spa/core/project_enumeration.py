@@ -83,6 +83,7 @@ from typing import Literal
 from pdomain_book_tools.typography import BookLabelingManifest, LabelingBundle
 from pydantic import ValidationError
 
+from .persistence.labeling_contract import require_pinned_labeling_bundle
 from .review_counts import WordReviewCountsJournal
 
 logger = logging.getLogger(__name__)
@@ -449,6 +450,7 @@ def _labeling_bundle_project_id(bundle_path: Path, *, fallback: str) -> str:
     """Read the canonical project id from a standalone labeling bundle."""
     try:
         bundle = LabelingBundle.model_validate_json(bundle_path.read_bytes())
+        require_pinned_labeling_bundle(bundle)
     except (OSError, ValidationError, ValueError):
         logger.debug("enumerate_projects: project id unavailable for bundle %s", bundle_path, exc_info=True)
         return fallback

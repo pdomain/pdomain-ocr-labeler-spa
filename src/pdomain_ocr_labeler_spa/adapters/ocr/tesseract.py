@@ -20,6 +20,7 @@ from pdomain_book_tools.ocr.page import Page
 from pdomain_book_tools.ocr.word import Word
 from PIL import Image
 
+from ...core.exchange_models import image_encoding_of, ocr_exchange_identity
 from ...core.page_state import PageImageNotFoundError, PageLoadOutcome, PageSource
 from .base import OCRProvenance
 from .local_doctr import LocalDoctrPageLoader, _ingest_ocr_result
@@ -320,6 +321,15 @@ class TesseractPageLoader:
                     project=self.project,
                     image_is_edited=edited_image_bytes is not None,
                     tool="tesseract",
+                    exchange_identity=ocr_exchange_identity(
+                        engine="tesseract",
+                        detection_key="psm3",
+                        recognition_key=self.language,
+                        hf_revision=None,
+                        image_width=page.width,
+                        image_height=page.height,
+                        image_encoding=image_encoding_of(image_bytes),
+                    ),
                 )
                 object.__setattr__(page, "_labeler_page_id", aggregate.record.page_id)
         return PageLoadOutcome(page_index=page_index, source=PageSource.OCR, payload=page)

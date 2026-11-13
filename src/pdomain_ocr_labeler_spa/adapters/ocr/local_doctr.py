@@ -36,6 +36,14 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal
 
+from ...core.exchange_models import (
+    EXCHANGE_NAMESPACE,
+    ExchangeExtension,
+    OcrExchangeIdentity,
+    build_ocr_model_run,
+    merge_exchange_run,
+    ocr_exchange_identity,
+)
 from ...core.labeler_sidecars import LegacyTypographyPayloadError
 from ...core.models import Project
 from ...core.ocr.predictor import PredictorCache
@@ -151,6 +159,7 @@ def _ingest_ocr_result(
     image_is_edited: bool = False,
     tool: str = "doctr",
     boundary_op: Literal["reocr", "rotate"] = "reocr",
+    exchange_identity: OcrExchangeIdentity | None = None,
 ) -> Any:  # PageAggregate
     """Fire OcrCompleted on a new PageAggregate and persist via LabelerPageStore.
 
@@ -232,6 +241,25 @@ def _ingest_ocr_result(
         source="ocr",
         provenance=prov_graph,
     )
+    if exchange_identity is not None:
+        from pdomain_ops.pages.extensions import set_extension as set_record_extension
+
+        ocr_run = build_ocr_model_run(
+            store,
+            exchange_identity,
+            image_sha256=image_hash,
+            output_sha256=content_hash,
+        )
+        set_record_extension(
+            record,
+            EXCHANGE_NAMESPACE,
+            merge_exchange_run(
+                ExchangeExtension(),
+                ocr_run,
+                image_width=exchange_identity.image_width,
+                image_height=exchange_identity.image_height,
+            ),
+        )
 
     agg = PageAggregate(record)
     agg.ocr_completed(
@@ -595,6 +623,14 @@ class LocalDoctrPageLoader:
                     store=self.store,
                     project=self.project,
                     image_is_edited=image_is_edited,
+                    exchange_identity=ocr_exchange_identity(
+                        engine="local_doctr",
+                        detection_key=self.detection_key,
+                        recognition_key=self.recognition_key,
+                        hf_revision=self.hf_revision,
+                        image_width=page_obj.width,
+                        image_height=page_obj.height,
+                    ),
                 )
                 # Stamp the page_id from the aggregate onto the page object
                 # so callers can transfer it to PageState.page_id.
