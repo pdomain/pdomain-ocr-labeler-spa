@@ -36,7 +36,7 @@ requires today.
 
 | Repository | Owns | How this labeler uses it |
 | --- | --- | --- |
-| `pdomain-book-tools` | OCR runtime and page models. Pinned at `0.31.3`. | DocTR prediction, layout, and image rotation. Do not reach into its internals. |
+| `pdomain-book-tools` | OCR runtime and page models. Requires `>=0.31.3,<0.32`. | DocTR prediction, layout, and image rotation. Do not reach into its internals. |
 | `pdomain-book-contracts` | Shared annotation, layout, glyph, and alignment contracts. Requires `>=0.3.3`. The lockfile selects `0.3.3`. | Region roles, page kinds, glyph wire values, and P3-F2 alignment. |
 | `pdomain-ops` | Suite page records, paths, provenance, and export schemas. Requires `>=0.12.6`. | `PageRecord` and shared lifecycle types. Labeler-only view state stays in `extensions["labeler"]`. |
 | `pdomain-pgdp-measure` | Page measurement. Requires `>=0.1.0`. | Book-scoped page-kind proposals. |

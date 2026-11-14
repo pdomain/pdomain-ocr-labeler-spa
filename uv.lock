@@ -1473,7 +1473,7 @@ requires-dist = [
     { name = "idna", specifier = ">=3.19" },
     { name = "modal", marker = "extra == 'modal'", specifier = ">=0.66" },
     { name = "pdomain-book-contracts", specifier = ">=0.3.3", index = "https://pdomain.github.io/pdomain-index-pip/simple/" },
-    { name = "pdomain-book-tools", specifier = "==0.31.3", index = "https://pdomain.github.io/pdomain-index-pip/simple/" },
+    { name = "pdomain-book-tools", specifier = ">=0.31.3,<0.32", index = "https://pdomain.github.io/pdomain-index-pip/simple/" },
     { name = "pdomain-ops", specifier = ">=0.12.6", index = "https://pdomain.github.io/pdomain-index-pip/simple/" },
     { name = "pdomain-pgdp-measure", specifier = ">=0.1.1", index = "https://pdomain.github.io/pdomain-index-pip/simple/" },
     { name = "pydantic", specifier = ">=2.13" },

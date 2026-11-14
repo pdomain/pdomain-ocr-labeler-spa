@@ -161,7 +161,7 @@ Major groups:
 
 | Package | Required | Used for |
 |---------|-----------|----------|
-| `pdomain-book-tools` | `==0.31.3` | OCR runtime and page models |
+| `pdomain-book-tools` | `>=0.31.3,<0.32` | OCR runtime and page models |
 | `pdomain-book-contracts` | `>=0.3.3` (lockfile `0.3.3`) | Annotation, glyph, layout, and P3-F2 alignment contracts |
 | `pdomain-ops` | `>=0.12.6` | Suite bootstrap/routes, device preferences, shared paths, page records and aggregates, local persistence, provenance, and export schemas |
 | `pdomain-pgdp-measure` | `>=0.1.0` | Book-scoped page-kind measurement |
