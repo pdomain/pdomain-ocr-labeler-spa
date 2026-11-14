@@ -236,5 +236,5 @@ The local warning cleanup, Just migration, pin refresh and docs corrections are 
 as a new release. Planning targets minor `v0.7.0` from published `v0.6.0`, through `just release-minor`;
 publication waits for the coordinator's inbox release.
 
-Locked book-tools remains 0.31.0, measure 0.1.0 and numpy 2.4.6. No upstream pin adoption, index publication,
+Locked book-tools is 0.31.3, measure 0.1.1 and numpy 2.5.4. No upstream pin adoption, index publication,
 service restart or deployment is implied by this documentation pass.
